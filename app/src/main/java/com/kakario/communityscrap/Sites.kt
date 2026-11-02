@@ -67,7 +67,16 @@ data class Post(
     val url: String,
     val thumb: String? = null,
     val comments: Int? = null,
+    /** 작성자 */
     val info: String? = null,
+    /** 말머리·주제 */
+    val category: String? = null,
+    val time: String? = null,
+    val views: Int? = null,
+    val likes: Int? = null,
 ) {
     val key get() = "${site.name}:$id"
 }
+
+/** 게시판 안의 소분류(카테고리·말머리) */
+data class Category(val name: String, val url: String)

@@ -55,6 +55,9 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.kakario.communityscrap.FeedViewModel
+import com.kakario.communityscrap.Category
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.lazy.LazyRow
 import com.kakario.communityscrap.Post
 import com.kakario.communityscrap.Site
 import com.kakario.communityscrap.Store
@@ -84,9 +87,15 @@ fun HomeScreen(
 
         val labels = listOf("전체") + sites.map { it.label }
         CategoryTabs(labels, tab, onSelect = { tab = it })
+        if (current != null) {
+            val cats = feed.categories[current].orEmpty()
+            if (cats.isNotEmpty()) {
+                SubCategoryRow(cats, feed.selectedCat[current], onSelect = { feed.selectCategory(current, it) })
+            }
+        }
 
         val state = rememberLazyListState()
-        LaunchedEffect(tab) { state.scrollToItem(0) }
+        LaunchedEffect(tab, current?.let { feed.selectedCat[it] }) { state.scrollToItem(0) }
 
         // 끝 근처까지 내리면 다음 페이지를 자동으로 불러온다
         val nearEnd by remember {
@@ -205,4 +214,35 @@ fun FitText(text: String, color: Color, bold: Boolean, maxSize: Float = 14.5f, m
             if (r.didOverflowWidth && size > minSize) size -= 0.5f else ready = true
         },
     )
+}
+
+/** 게시판 소분류: 가로로 밀어서 고르는 줄 */
+@Composable
+fun SubCategoryRow(cats: List<Category>, selectedUrl: String?, onSelect: (Category?) -> Unit) {
+    val all = listOf<Category?>(null) + cats
+    LazyRow(
+        Modifier.fillMaxWidth(),
+        contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp),
+        horizontalArrangement = Arrangement.spacedBy(6.dp),
+    ) {
+        items(all, key = { it?.url ?: "all" }) { c ->
+            val on = if (c == null) selectedUrl == null else c.url == selectedUrl
+            Surface(
+                onClick = { onSelect(c) },
+                shape = RoundedCornerShape(50),
+                color = if (on) Color(0xFFE3EDFD) else Color.White,
+                border = BorderStroke(1.dp, if (on) TabBlue else Color(0xFFDDDDDD)),
+            ) {
+                Text(
+                    c?.name ?: "전체",
+                    Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
+                    fontSize = 13.sp,
+                    color = if (on) TabBlue else Color(0xFF444444),
+                    fontWeight = if (on) FontWeight.Bold else FontWeight.Normal,
+                    maxLines = 1,
+                )
+            }
+        }
+    }
+    HorizontalDivider(color = Line)
 }

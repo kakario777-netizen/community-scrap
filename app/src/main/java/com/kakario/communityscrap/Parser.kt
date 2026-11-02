@@ -26,6 +26,82 @@ object Parser {
         Site.GOODGAG to listOf(".nick", ".writer", ".name"),
     )
 
+    private val categorySelectors = mapOf(
+        Site.ARCA to listOf(".badge", ".vrow-top .badge"),
+        Site.RULIWEB to listOf(".divsn", ".category", ".cate"),
+        Site.GOODGAG to listOf(".category", ".cate", ".tag", "[class*=category]", "[class*=cate]"),
+    )
+    private val timeSelectors = listOf("time", ".col-time", ".time", ".date", ".regdate", ".datetime", "[class*=date]")
+    private val viewSelectors = listOf(".col-view", ".hit", ".view_count", ".views", ".count_view", ".read", "[class*=hit]", "[class*=view_cnt]")
+    private val likeSelectors = listOf(".col-rate", ".recomd", ".recommend", ".like", ".likes", ".vote", ".up", "[class*=recom]", "[class*=like]")
+
+    private fun textOf(row: Element, sels: List<String>, maxLen: Int): String? {
+        for (sel in sels) {
+            val el = row.selectFirst(sel) ?: continue
+            val t = el.text().trim().replace(Regex("\\s+"), " ")
+            if (t.isNotEmpty() && t.length <= maxLen) return t
+        }
+        return null
+    }
+
+    private fun numberOf(row: Element, sels: List<String>): Int? {
+        for (sel in sels) {
+            val t = row.selectFirst(sel)?.text()?.trim() ?: continue
+            if (t.length > 14) continue
+            val clean = t.replace(",", "")
+            Regex("""(\d+(?:\.\d+)?)\s*만""").find(clean)?.let { return (it.groupValues[1].toDouble() * 10000).toInt() }
+            Regex("""\d{1,9}""").find(clean)?.value?.toIntOrNull()?.let { return it }
+        }
+        return null
+    }
+
+    private fun pickTime(row: Element): String? {
+        val t = row.selectFirst("time")
+        if (t != null) {
+            val txt = t.text().trim()
+            if (txt.isNotEmpty() && txt.length <= 20) return txt
+            val dt = t.attr("datetime")
+            if (dt.length >= 16) return dt.substring(5, 16).replace('T', ' ').replace('-', '.')
+        }
+        return textOf(row, timeSelectors.drop(1), 20)
+    }
+
+    private fun pickCategory(site: Site, a: Element, row: Element): String? {
+        for (sel in categorySelectors[site].orEmpty()) {
+            val el = a.selectFirst(sel) ?: row.selectFirst(sel) ?: continue
+            val t = el.text().trim().trim('[', ']', '(', ')').trim()
+            if (t.isNotEmpty() && t.length <= 12 && !t.all { it.isDigit() }) return t
+        }
+        return null
+    }
+
+    /** 게시판 페이지 안의 소분류 링크(같은 게시판 주소 + 분류 파라미터) */
+    fun categories(site: Site, html: String, baseUrl: String): List<Category> {
+        val base = runCatching { java.net.URI(baseUrl) }.getOrNull() ?: return emptyList()
+        val basePath = (base.path ?: "").trimEnd('/')
+        val keys = setOf("category", "cate", "ctg", "sca", "bo_cat", "cat", "division", "tag", "mode")
+        val doc = Jsoup.parse(html, baseUrl)
+        val out = LinkedHashMap<String, Category>()
+        for (a in doc.select("a[href]")) {
+            val href = a.absUrl("href").substringBefore('#')
+            if (href.isEmpty() || site.postPattern.containsMatchIn(href)) continue
+            val u = runCatching { java.net.URI(href) }.getOrNull() ?: continue
+            if (u.host != base.host) continue
+            val path = (u.path ?: "").trimEnd('/')
+            if (!(path == basePath || path == "$basePath/list")) continue
+            val query = u.rawQuery ?: continue
+            val hit = query.split('&').any { kv ->
+                val k = kv.substringBefore('=').lowercase()
+                k in keys && kv.substringAfter('=', "").isNotEmpty()
+            }
+            if (!hit) continue
+            val name = a.text().trim().replace(Regex("\\s+"), " ")
+            if (name.isEmpty() || name.length > 15 || name.all { it.isDigit() }) continue
+            if (name !in out) out[name] = Category(name, href)
+        }
+        return out.values.toList()
+    }
+
     fun parse(site: Site, html: String, baseUrl: String): List<Post> {
         val doc = Jsoup.parse(html, baseUrl)
         val found = LinkedHashMap<String, Post>()
@@ -46,10 +122,15 @@ object Parser {
                 row.selectFirst(sel)?.text()?.trim()?.takeIf { it.isNotEmpty() && it.length < 30 }
             }
             title = title.trim()
+            val category = pickCategory(site, a, row)
+            if (category != null && title.startsWith(category)) title = title.removePrefix(category).trim()
+            val time = pickTime(row)
+            val views = numberOf(row, viewSelectors)
+            val likes = numberOf(row, likeSelectors)
 
             val prev = found[id]
             if (prev == null) {
-                found[id] = Post(site, id, title, cleanUrl(href), thumb, comments, info)
+                found[id] = Post(site, id, title, cleanUrl(href), thumb, comments, info, category, time, views, likes)
             } else {
                 // 같은 글을 가리키는 링크가 여러 개(썸네일 링크, 제목 링크)면 합친다
                 found[id] = prev.copy(
@@ -57,6 +138,10 @@ object Parser {
                     thumb = prev.thumb ?: thumb,
                     comments = prev.comments ?: comments,
                     info = prev.info ?: info,
+                    category = prev.category ?: category,
+                    time = prev.time ?: time,
+                    views = prev.views ?: views,
+                    likes = prev.likes ?: likes,
                 )
             }
         }
