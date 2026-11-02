@@ -102,15 +102,43 @@ object Parser {
         return out.values.toList()
     }
 
+    /** 목록 옆 칸·광고·쇼핑 묶음 안의 링크는 게시판 글이 아니다 */
+    private val sideWords = Regex("""(^|[\s_-])(aside|sidebar|ad|ads|banner|shopping|shop|live-?shop|sponsor|promotion|footer)([\s_-]|$)""", RegexOption.IGNORE_CASE)
+
+    private fun inSideArea(a: Element): Boolean {
+        var n: Element? = a
+        var d = 0
+        while (n != null && d < 10) {
+            if (n.tagName() == "aside" || n.tagName() == "footer") return true
+            if (sideWords.containsMatchIn(n.className() + " " + n.id())) return true
+            n = n.parent(); d++
+        }
+        return false
+    }
+
+    /** 제목이 날짜·시간·숫자뿐이면 글이 아니다 */
+    private val notTitle = Regex("""^[\d\s.:/\-()년월일시분초전]+$""")
+
     fun parse(site: Site, html: String, baseUrl: String): List<Post> {
+        val strict = parse(site, html, baseUrl, strict = true)
+        return strict.ifEmpty { parse(site, html, baseUrl, strict = false) }
+    }
+
+    private fun parse(site: Site, html: String, baseUrl: String, strict: Boolean): List<Post> {
         val doc = Jsoup.parse(html, baseUrl)
         val found = LinkedHashMap<String, Post>()
+        // 아카라이브: 채널 게시판이면 그 채널 글만 (다른 채널 홍보·쇼핑 글 제외)
+        val arcaChannel = if (site == Site.ARCA) Regex("""arca\.live/b/([\w-]+)""").find(baseUrl)?.groupValues?.get(1) else null
 
         for (a in doc.select("a[href]")) {
             val href = a.absUrl("href")
             if (href.isEmpty()) continue
             val m = site.postPattern.find(href) ?: continue
             val id = m.groupValues.last()
+            if (strict && arcaChannel != null && arcaChannel != "live" &&
+                Regex("""arca\.live/b/([\w-]+)/""").find(href)?.groupValues?.get(1) != arcaChannel
+            ) continue
+            if (strict && inSideArea(a)) continue
             val row = rowOf(a, site)
             if (isNotice(a) || isNotice(row)) continue
 
@@ -145,7 +173,7 @@ object Parser {
                 )
             }
         }
-        return found.values.filter { it.title.length >= 2 }
+        return found.values.filter { it.title.length >= 2 && !notTitle.matches(it.title) }
     }
 
     private fun cleanUrl(href: String): String = href.substringBefore('#')

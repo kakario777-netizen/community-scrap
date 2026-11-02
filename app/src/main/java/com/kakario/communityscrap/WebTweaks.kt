@@ -111,6 +111,12 @@ img, video { pointer-events:auto !important; -webkit-user-drag:auto !important; 
     var prev = window.__csArt;
     if (prev && document.contains(prev) && (!art || score(prev) >= bs*0.7)) { art = prev; bs = score(prev); }
     if (!art || bs < 120) return 'none';
+    // 본문 영역이 너무 넓게 잡혔으면, 내용 대부분을 가진 안쪽 칸으로 좁힌다
+    for (var dd=0; dd<5; dd++){
+      var bk=null, b2=-1;
+      Array.prototype.forEach.call(art.children, function(k){ var s2=score(k); if (s2>b2){b2=s2;bk=k;} });
+      if (bk && b2 >= bs*0.92 && !bad(bk)) { art=bk; bs=b2; } else break;
+    }
     window.__csArt = art;
     var keep=[art];
     var cm=null, cs=-1;
@@ -133,7 +139,17 @@ img, video { pointer-events:auto !important; -webkit-user-drag:auto !important; 
     var st = document.getElementById('cs-iso');
     if (!st) { st = document.createElement('style'); st.id = 'cs-iso'; (document.head||document.documentElement).appendChild(st); }
     st.textContent = 'body *:not([data-cs-path]):not([data-cs-root]):not([data-cs-root] *){display:none !important}' +
-      '[data-cs-path]{position:static !important;transform:none !important;padding-top:0 !important;margin-top:0 !important;min-height:0 !important}';
+      '[data-cs-path]{position:static !important;transform:none !important;padding-top:0 !important;margin-top:0 !important;min-height:0 !important}' +
+      '[data-cs-root] header,[data-cs-root] nav,[data-cs-root] [class*="gnb"],[data-cs-root] [class*="navbar"],[data-cs-root] [class*="topbar"],' +
+      '[data-cs-root] [class*="top_bar"],[data-cs-root] [class*="top-bar"],[data-cs-root] [class*="logo"],[data-cs-root] [id*="header"],' +
+      '[data-cs-root] [class*="header"]:not([class*="article"]):not([class*="view"]):not([class*="post"]):not([class*="cmt"]):not([class*="comment"]){display:none !important}';
+    // 본문 안에 들어있는 화면 고정 막대(위·아래 붙는 메뉴)도 숨긴다
+    keep.forEach(function(k){
+      k.querySelectorAll('*').forEach(function(e){
+        var pos = getComputedStyle(e).position;
+        if ((pos==='fixed' || pos==='sticky') && !e.querySelector('textarea')) { e.style.setProperty('display','none','important'); e.setAttribute('data-cs-hidden','1'); }
+      });
+    });
     document.querySelectorAll('.included-article-list,.article-list,.board_list_table,.relative_list,.notice_board').forEach(function(e){
       if (!holds(e) && !(cm && cm.contains(e)) && !art.contains(e)) { e.style.setProperty('display','none','important'); e.setAttribute('data-cs-hidden','1'); }
     });
@@ -152,10 +168,10 @@ img, video { pointer-events:auto !important; -webkit-user-drag:auto !important; 
     }
 
     /** 로딩이 끝난 뒤: 늦게 붙는 댓글을 위해 몇 번 더 반복 */
-    fun isolateLater(view: WebView, site: Site, title: String) {
+    fun isolateLater(view: WebView, site: Site, title: String, stillValid: () -> Boolean) {
         val js = isolateJs(site, title)
-        view.postDelayed({ view.evaluateJavascript(js, null) }, 1200)
-        view.postDelayed({ view.evaluateJavascript(js, null) }, 3000)
+        view.postDelayed({ if (stillValid()) view.evaluateJavascript(js, null) }, 1200)
+        view.postDelayed({ if (stillValid()) view.evaluateJavascript(js, null) }, 3000)
     }
 
     const val FONT_HOST = "cs-font.local"

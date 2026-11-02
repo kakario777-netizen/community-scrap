@@ -246,7 +246,7 @@ fun ViewerScreen(start: Post?, list: List<Post>, onBack: () -> Unit) {
                         WebTweaks.isolateOnce(view, site, post.title) { ok ->
                             if (token != loadToken) return@isolateOnce
                             if (ok) { isoOk = true; reveal(view) }
-                            else if (left > 0) view.postDelayed({ if (token == loadToken && !isoOk) tryIsolate(view, url, left - 1) }, 500)
+                            else if (left > 0) view.postDelayed({ if (token == loadToken && !isoOk && !showOriginal) tryIsolate(view, url, left - 1) }, 500)
                             else covered = false
                         }
                     }
@@ -254,7 +254,7 @@ fun ViewerScreen(start: Post?, list: List<Post>, onBack: () -> Unit) {
                         override fun onProgressChanged(view: WebView, newProgress: Int) {
                             progress = newProgress
                             if (newProgress > 30) WebTweaks.inject(view)
-                            if (newProgress >= 45 && covered && !isoOk) {
+                            if (newProgress >= 45 && covered && !isoOk && !showOriginal) {
                                 val site = Site.forUrl(view.url ?: post.url) ?: post.site
                                 val token = loadToken
                                 WebTweaks.isolateOnce(view, site, post.title) { ok ->
@@ -291,7 +291,8 @@ fun ViewerScreen(start: Post?, list: List<Post>, onBack: () -> Unit) {
                             if (Store.isolate && !showOriginal) {
                                 val site = Site.forUrl(url ?: post.url) ?: post.site
                                 if (!isoOk) tryIsolate(view, url, 4)
-                                WebTweaks.isolateLater(view, site, post.title)
+                                val token = loadToken
+                                WebTweaks.isolateLater(view, site, post.title) { token == loadToken && !showOriginal && Store.isolate }
                             } else covered = false
                             if (clearNext) { view.clearHistory(); clearNext = false }
                             CookieManager.getInstance().flush()

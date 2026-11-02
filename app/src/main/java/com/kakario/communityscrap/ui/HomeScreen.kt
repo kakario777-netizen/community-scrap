@@ -10,6 +10,8 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.lazy.LazyListState
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
@@ -73,6 +75,13 @@ import com.kakario.communityscrap.Post
 import com.kakario.communityscrap.Site
 import com.kakario.communityscrap.Store
 
+/** 목록 스크롤 위치 기억 (앱이 켜져 있는 동안) */
+object ScrollMemory {
+    private val map = HashMap<String, Pair<Int, Int>>()
+    fun get(k: String) = map[k] ?: (0 to 0)
+    fun put(k: String, i: Int, o: Int) { map[k] = i to o }
+}
+
 @Composable
 fun HomeScreen(
     feed: FeedViewModel,
@@ -112,11 +121,18 @@ fun HomeScreen(
             }
         }
 
-        val state = rememberLazyListState()
-        LaunchedEffect(tab, current?.let { feed.selectedCat[it] }, curPage) { state.scrollToItem(0) }
+        // 탭·소분류·페이지마다 스크롤 위치를 따로 기억 (글 보고 돌아오면 보던 자리 그대로)
+        val viewKey = "$tabKey|${current?.let { feed.selectedCat[it] }}|$curPage"
+        val state = remember(viewKey) {
+            val saved = ScrollMemory.get(viewKey)
+            LazyListState(saved.first, saved.second)
+        }
+        DisposableEffect(state, viewKey) {
+            onDispose { ScrollMemory.put(viewKey, state.firstVisibleItemIndex, state.firstVisibleItemScrollOffset) }
+        }
 
         // 전체 탭: 끝 근처까지 내리면 다음 페이지를 자동으로 불러온다
-        val nearEnd by remember {
+        val nearEnd by remember(state) {
             derivedStateOf {
                 val info = state.layoutInfo
                 val last = info.visibleItemsInfo.lastOrNull()?.index ?: 0
