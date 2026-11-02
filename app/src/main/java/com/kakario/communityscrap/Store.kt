@@ -46,6 +46,43 @@ object Store {
         private set
     fun updateIsolate(v: Boolean) { isolate = v; prefs.edit().putBoolean("isolate", v).apply() }
 
+    /** 배경색 */
+    var bgKey by mutableStateOf("white")
+        private set
+    fun updateBg(v: String) { bgKey = v; prefs.edit().putString("bg", v).apply() }
+
+    /** 탭 순서(ALL=전체, 그 외 사이트 이름), 전체 탭 켜기, 앱 켰을 때 첫 탭 */
+    var tabOrder by mutableStateOf(listOf("ALL") + Site.entries.map { it.name })
+        private set
+    var allTabOn by mutableStateOf(true)
+        private set
+    var startTab by mutableStateOf("ALL")
+        private set
+
+    fun moveTab(key: String, delta: Int) {
+        val l = tabOrder.toMutableList()
+        val i = l.indexOf(key); val j = i + delta
+        if (i < 0 || j !in l.indices) return
+        l[i] = l[j]; l[j] = key
+        tabOrder = l
+        prefs.edit().putString("tab_order", l.joinToString(",")).apply()
+    }
+    fun updateAllTab(v: Boolean) { allTabOn = v; prefs.edit().putBoolean("all_tab", v).apply() }
+    fun updateStartTab(v: String) { startTab = v; prefs.edit().putString("start_tab", v).apply() }
+
+    /** 보이는 탭 순서대로 */
+    fun visibleTabs(): List<String> = tabOrder.filter { k ->
+        if (k == "ALL") allTabOn else runCatching { Site.valueOf(k) }.getOrNull()?.let { it in enabled } == true
+    }.ifEmpty { listOf("ALL") }
+
+    /** 이미지·영상 저장 폴더 (비어 있으면 기본: 사진/동영상의 커뮤모아 폴더) */
+    var saveTree by mutableStateOf<String?>(null)
+        private set
+    fun updateSaveTree(v: String?) {
+        saveTree = v
+        prefs.edit().apply { if (v == null) remove("save_tree") else putString("save_tree", v) }.apply()
+    }
+
     fun updateFont(v: String) { font = v; prefs.edit().putString("font", v).apply() }
     fun updateAdBlock(v: Boolean) { adBlock = v; prefs.edit().putBoolean("adblock", v).apply() }
     fun updateUnlock(v: Boolean) { unlock = v; prefs.edit().putBoolean("unlock", v).apply() }
@@ -86,6 +123,14 @@ object Store {
         unlock = prefs.getBoolean("unlock", true)
         fontInWeb = prefs.getBoolean("font_web", true)
         isolate = prefs.getBoolean("isolate", true)
+        bgKey = prefs.getString("bg", "white") ?: "white"
+        allTabOn = prefs.getBoolean("all_tab", true)
+        startTab = prefs.getString("start_tab", "ALL") ?: "ALL"
+        saveTree = prefs.getString("save_tree", null)
+        prefs.getString("tab_order", null)?.split(',')?.let { saved ->
+            val all = listOf("ALL") + Site.entries.map { it.name }
+            tabOrder = saved.filter { it in all } + all.filter { it !in saved }
+        }
         bookmarks = runCatching {
             val arr = JSONArray(prefs.getString("bookmarks", "[]"))
             (0 until arr.length()).mapNotNull { i -> fromJson(arr.getJSONObject(i)) }

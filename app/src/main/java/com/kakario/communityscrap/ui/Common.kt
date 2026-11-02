@@ -45,8 +45,26 @@ import com.kakario.communityscrap.Post
 import com.kakario.communityscrap.Site
 import com.kakario.communityscrap.Store
 
-val Line = Color(0xFFECECEC)
-val Sub = Color(0xFF8A8A8A)
+/** 배경색 묶음 (설정에서 고름) */
+data class Palette(
+    val key: String, val label: String,
+    val bg: Color, val card: Color, val text: Color, val sub: Color, val line: Color,
+    val soft: Color, val softBorder: Color, val dark: Boolean = false,
+)
+
+object Pal {
+    val all = listOf(
+        Palette("white", "흰색", Color(0xFFFFFFFF), Color(0xFFF6F7F9), Color(0xFF1A1A1A), Color(0xFF8A8A8A), Color(0xFFECECEC), Color(0xFFEFF4FD), Color(0xFFD5E2F8)),
+        Palette("gray", "연한 회색", Color(0xFFF2F3F5), Color(0xFFFFFFFF), Color(0xFF1A1A1A), Color(0xFF85888E), Color(0xFFE0E2E6), Color(0xFFE6EEFB), Color(0xFFCCDAF3)),
+        Palette("cream", "미색", Color(0xFFFBF8F1), Color(0xFFF2ECDF), Color(0xFF2A251C), Color(0xFF8C8577), Color(0xFFE8E0CF), Color(0xFFEDEFF5), Color(0xFFD3DBEA)),
+        Palette("sky", "연한 하늘", Color(0xFFF2F7FE), Color(0xFFFFFFFF), Color(0xFF15233A), Color(0xFF7D8899), Color(0xFFDCE6F4), Color(0xFFE2ECFC), Color(0xFFC9DAF6)),
+        Palette("dark", "어두운 색", Color(0xFF16181C), Color(0xFF22252B), Color(0xFFE8EAED), Color(0xFF9AA0A6), Color(0xFF2E3238), Color(0xFF1E2B44), Color(0xFF2F4670), dark = true),
+    )
+    val cur: Palette get() = all.firstOrNull { it.key == Store.bgKey } ?: all[0]
+}
+
+val Line: Color get() = Pal.cur.line
+val Sub: Color get() = Pal.cur.sub
 
 fun Site.c() = Color(color)
 
@@ -111,7 +129,7 @@ fun TopicTag(text: String, color: Color) {
 fun PostRow(p: Post, showSite: Boolean, onClick: () -> Unit, onLong: () -> Unit) {
     val read = p.key in Store.readKeys
     val marked = Store.bookmarks.any { it.url == p.url }
-    val titleColor = if (read) Color(0xFFA6A6A6) else Color(0xFF1A1A1A)
+    val titleColor = if (read) Pal.cur.sub.copy(alpha = 0.75f) else Pal.cur.text
     Column(Modifier.fillMaxWidth().combinedClickable(onClick = onClick, onLongClick = onLong)) {
         Row(
             Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 11.dp),
@@ -121,7 +139,7 @@ fun PostRow(p: Post, showSite: Boolean, onClick: () -> Unit, onLong: () -> Unit)
             Column(Modifier.weight(1f)) {
                 Row(verticalAlignment = Alignment.Top) {
                     p.category?.let {
-                        TopicTag(it, if (read) Color(0xFFA6A6A6) else Color(0xFF1E6BE6))
+                        TopicTag(it, if (read) Pal.cur.sub else Color(0xFF3D82F0))
                         Spacer(Modifier.width(6.dp))
                     }
                     Text(
@@ -167,7 +185,7 @@ fun PostRow(p: Post, showSite: Boolean, onClick: () -> Unit, onLong: () -> Unit)
                     model = p.thumb,
                     contentDescription = null,
                     contentScale = ContentScale.Crop,
-                    modifier = Modifier.size(64.dp).clip(RoundedCornerShape(8.dp)).background(Color(0xFFF2F2F2)),
+                    modifier = Modifier.size(64.dp).clip(RoundedCornerShape(8.dp)).background(Pal.cur.card),
                 )
             }
         }

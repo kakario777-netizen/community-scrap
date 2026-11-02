@@ -18,6 +18,16 @@ import java.io.InputStream
 object Saver {
     private const val FOLDER = "커뮤모아"
 
+    /** 설정 화면에 보여줄 저장 위치 이름 */
+    fun folderLabel(): String {
+        val t = Store.saveTree ?: return "기본: 사진·동영상 › 커뮤모아"
+        val id = runCatching { android.provider.DocumentsContract.getTreeDocumentId(Uri.parse(t)) }.getOrNull() ?: return t
+        val vol = id.substringBefore(':')
+        val path = id.substringAfter(':', "")
+        val root = if (vol == "primary") "내장 저장공간" else "SD카드"
+        return if (path.isEmpty()) root else "$root › ${path.replace("/", " › ")}"
+    }
+
     sealed class Result {
         data class Ok(val name: String) : Result()
         data class Fail(val why: String) : Result()
@@ -60,6 +70,19 @@ object Saver {
         val video = mime.startsWith("video/")
         val ext = MimeTypeMap.getSingleton().getExtensionFromMimeType(mime) ?: if (video) "mp4" else "jpg"
         val name = "${base}_${System.currentTimeMillis() % 1_000_000}.$ext"
+
+        // 설정에서 고른 폴더가 있으면 그곳에 저장
+        Store.saveTree?.let { t ->
+            val tree = Uri.parse(t)
+            val r = ctx.contentResolver
+            val dir = android.provider.DocumentsContract.buildDocumentUriUsingTree(
+                tree, android.provider.DocumentsContract.getTreeDocumentId(tree)
+            )
+            val doc = runCatching { android.provider.DocumentsContract.createDocument(r, dir, mime, name) }.getOrNull()
+                ?: return Result.Fail("고른 폴더에 저장하지 못했어요. 설정에서 저장 폴더를 다시 골라 주세요.")
+            r.openOutputStream(doc)?.use { out -> input.copyTo(out) }
+            return Result.Ok(name)
+        }
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
             val coll = if (video) MediaStore.Video.Media.getContentUri(MediaStore.VOLUME_EXTERNAL_PRIMARY)

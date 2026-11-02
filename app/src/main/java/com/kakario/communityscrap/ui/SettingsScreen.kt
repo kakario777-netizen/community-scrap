@@ -47,6 +47,16 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Delete
 import android.webkit.WebChromeClient
 import com.kakario.communityscrap.Post
+import com.kakario.communityscrap.Saver
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.border
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.size
+import androidx.compose.ui.draw.clip
+import androidx.compose.material.icons.filled.KeyboardArrowDown
+import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.foundation.background
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.window.Dialog
@@ -77,8 +87,37 @@ fun SettingsScreen(onLogin: (Site) -> Unit, onBack: () -> Unit) {
             Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(14.dp),
         ) {
+            SectionTitle("탭")
+            TabSettings()
+
+            SectionTitle("배경색")
+            Surface(shape = RoundedCornerShape(12.dp), color = Pal.cur.card) {
+                Row(
+                    Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(12.dp),
+                    horizontalArrangement = Arrangement.spacedBy(10.dp),
+                ) {
+                    Pal.all.forEach { pl ->
+                        val on = Store.bgKey == pl.key
+                        Column(
+                            Modifier.clickable { Store.updateBg(pl.key) },
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                        ) {
+                            Box(
+                                Modifier.size(52.dp).clip(RoundedCornerShape(12.dp)).background(pl.bg)
+                                    .border(if (on) 3.dp else 1.dp, if (on) TabBlue else pl.line, RoundedCornerShape(12.dp)),
+                                contentAlignment = Alignment.Center,
+                            ) { Text("가", color = pl.text, fontSize = 18.sp, fontWeight = FontWeight.Bold) }
+                            Text(pl.label, Modifier.padding(top = 4.dp), fontSize = 12.sp, color = if (on) TabBlue else Sub)
+                        }
+                    }
+                }
+            }
+
+            SectionTitle("저장 폴더")
+            SaveFolderCard()
+
             SectionTitle("보기")
-            Surface(shape = RoundedCornerShape(12.dp), color = Color(0xFFF7F7F7)) {
+            Surface(shape = RoundedCornerShape(12.dp), color = Pal.cur.card) {
                 Column(Modifier.fillMaxWidth().padding(vertical = 6.dp)) {
                     CheckRow("광고 차단", "글 화면의 광고를 막고 광고 칸을 숨겨요", Store.adBlock) { Store.updateAdBlock(it) }
                     CheckRow("글만 깔끔하게 보기", "글 화면에서 본문과 댓글까지만 보여줘요", Store.isolate) { Store.updateIsolate(it) }
@@ -88,7 +127,7 @@ fun SettingsScreen(onLogin: (Site) -> Unit, onBack: () -> Unit) {
             }
 
             SectionTitle("글꼴")
-            Surface(shape = RoundedCornerShape(12.dp), color = Color(0xFFF7F7F7)) {
+            Surface(shape = RoundedCornerShape(12.dp), color = Pal.cur.card) {
                 Column(Modifier.fillMaxWidth().padding(vertical = 6.dp)) {
                     val fonts = Fonts.available(ctx)
                     fonts.forEach { f ->
@@ -123,6 +162,83 @@ fun SettingsScreen(onLogin: (Site) -> Unit, onBack: () -> Unit) {
     }
 }
 
+/** 탭 순서(위·아래), 켜고 끄기, 앱 켰을 때 첫 탭 */
+@Composable
+private fun TabSettings() {
+    Surface(shape = RoundedCornerShape(12.dp), color = Pal.cur.card) {
+        Column(Modifier.fillMaxWidth().padding(vertical = 6.dp)) {
+            Text(
+                "화살표로 순서를 바꾸고, 스위치로 탭을 켜고 끄고, '시작'을 눌러 앱을 켰을 때 처음 볼 탭을 골라요.",
+                Modifier.padding(horizontal = 14.dp, vertical = 6.dp), fontSize = 12.sp, color = Sub, lineHeight = 17.sp,
+            )
+            val order = Store.tabOrder
+            order.forEachIndexed { i, key ->
+                val site = if (key == "ALL") null else runCatching { Site.valueOf(key) }.getOrNull()
+                val label = site?.label ?: "전체"
+                val on = if (site == null) Store.allTabOn else site in Store.enabled
+                val start = Store.startTab == key
+                Row(Modifier.fillMaxWidth().padding(start = 14.dp, end = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        label, Modifier.weight(1f), fontSize = 15.sp, fontWeight = FontWeight.SemiBold,
+                        color = if (on) (site?.c() ?: TabBlue) else Sub,
+                    )
+                    Surface(
+                        onClick = { if (on) Store.updateStartTab(key) },
+                        shape = RoundedCornerShape(50),
+                        color = if (start) TabBlue else Color.Transparent,
+                        border = androidx.compose.foundation.BorderStroke(1.dp, if (start) TabBlue else Pal.cur.line),
+                    ) {
+                        Text(
+                            "시작", Modifier.padding(horizontal = 10.dp, vertical = 4.dp), fontSize = 12.sp,
+                            color = if (start) Color.White else Sub, fontWeight = FontWeight.SemiBold,
+                        )
+                    }
+                    IconButton(onClick = { Store.moveTab(key, -1) }, enabled = i > 0) {
+                        Icon(Icons.Filled.KeyboardArrowUp, "위로")
+                    }
+                    IconButton(onClick = { Store.moveTab(key, 1) }, enabled = i < order.size - 1) {
+                        Icon(Icons.Filled.KeyboardArrowDown, "아래로")
+                    }
+                    Switch(checked = on, onCheckedChange = { v ->
+                        if (site == null) Store.updateAllTab(v) else Store.setEnabled(site, v)
+                        if (!v && start) Store.visibleTabs().firstOrNull()?.let { Store.updateStartTab(it) }
+                    })
+                }
+            }
+        }
+    }
+}
+
+/** 이미지·영상 저장 위치 */
+@Composable
+private fun SaveFolderCard() {
+    val ctx = LocalContext.current
+    val launcher = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocumentTree()) { uri ->
+        if (uri != null) {
+            runCatching {
+                ctx.contentResolver.takePersistableUriPermission(
+                    uri,
+                    android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION or android.content.Intent.FLAG_GRANT_WRITE_URI_PERMISSION,
+                )
+            }
+            Store.updateSaveTree(uri.toString())
+            Toast.makeText(ctx, "저장 폴더를 바꿨어요", Toast.LENGTH_SHORT).show()
+        }
+    }
+    Surface(shape = RoundedCornerShape(12.dp), color = Pal.cur.card) {
+        Column(Modifier.fillMaxWidth().padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Text("꾹 눌러 저장한 이미지·영상이 들어가는 곳", fontSize = 12.sp, color = Sub)
+            Text(Saver.folderLabel(), fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Button(onClick = { launcher.launch(null) }) { Text("폴더 고르기") }
+                if (Store.saveTree != null) {
+                    OutlinedButton(onClick = { Store.updateSaveTree(null) }) { Text("기본으로") }
+                }
+            }
+        }
+    }
+}
+
 @Composable
 private fun SectionTitle(t: String) {
     Text(t, fontSize = 13.sp, fontWeight = FontWeight.Bold, color = TabBlue, modifier = Modifier.padding(top = 4.dp))
@@ -149,26 +265,24 @@ private fun SiteCard(site: Site, onLogin: (Site) -> Unit) {
     val logged = Store.hasLogin(site)
     var picking by remember { mutableStateOf(false) }
 
-    Surface(shape = RoundedCornerShape(12.dp), color = Color(0xFFF7F7F7)) {
+    Surface(shape = RoundedCornerShape(12.dp), color = Pal.cur.card) {
         Column(Modifier.fillMaxWidth().padding(14.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(site.label, Modifier.weight(1f), fontSize = 16.sp, fontWeight = FontWeight.Bold, color = site.c())
-                Text(if (on) "목록에 표시" else "숨김", fontSize = 12.sp, color = Sub)
-                Spacer(Modifier.padding(4.dp))
-                Switch(checked = on, onCheckedChange = { Store.setEnabled(site, it) })
+                if (!on) Text("탭 꺼짐", fontSize = 12.sp, color = Sub)
             }
 
             // 눈에 잘 띄는 게시판 고르기 버튼
             Surface(
                 onClick = { picking = true },
                 shape = RoundedCornerShape(10.dp),
-                color = Color(0xFFE9F1FE),
-                border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFFC6DAFA)),
+                color = Pal.cur.soft,
+                border = androidx.compose.foundation.BorderStroke(1.dp, Pal.cur.softBorder),
             ) {
                 Row(Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 12.dp), verticalAlignment = Alignment.CenterVertically) {
                     Column(Modifier.weight(1f)) {
                         Text("보고 있는 게시판", fontSize = 12.sp, color = TabBlue)
-                        Text(Store.boardName(site), fontSize = 17.sp, fontWeight = FontWeight.Bold, color = Color(0xFF14284B), maxLines = 1)
+                        Text(Store.boardName(site), fontSize = 17.sp, fontWeight = FontWeight.Bold, color = Pal.cur.text, maxLines = 1)
                     }
                     Text("바꾸기  ›", fontSize = 14.sp, fontWeight = FontWeight.SemiBold, color = TabBlue)
                 }
@@ -228,7 +342,7 @@ private fun BoardPicker(site: Site, onClose: () -> Unit) {
     }
 
     Dialog(onDismissRequest = onClose, properties = DialogProperties(usePlatformDefaultWidth = false)) {
-        Surface(Modifier.fillMaxSize(), color = Color.White) {
+        Surface(Modifier.fillMaxSize(), color = Pal.cur.bg) {
             Column(Modifier.fillMaxSize()) {
                 Bar("${site.label} 게시판 고르기", onBack = onClose)
                 OutlinedTextField(
@@ -265,7 +379,7 @@ private fun BoardPicker(site: Site, onClose: () -> Unit) {
                         item(key = "h_$sec") {
                             Text(
                                 "$sec  ${boards.size}",
-                                Modifier.fillMaxWidth().background(Color(0xFFF3F6FB)).padding(horizontal = 16.dp, vertical = 8.dp),
+                                Modifier.fillMaxWidth().background(Pal.cur.card).padding(horizontal = 16.dp, vertical = 8.dp),
                                 fontSize = 13.sp, fontWeight = FontWeight.Bold, color = TabBlue,
                             )
                         }
@@ -273,14 +387,14 @@ private fun BoardPicker(site: Site, onClose: () -> Unit) {
                             val cur = curUrl == b.url.substringBefore('?')
                             Row(
                                 Modifier.fillMaxWidth().clickable { pick(b) }
-                                    .background(if (cur) Color(0xFFE9F1FE) else Color.White)
+                                    .background(if (cur) Pal.cur.soft else Pal.cur.bg)
                                     .padding(horizontal = 16.dp, vertical = 14.dp),
                                 verticalAlignment = Alignment.CenterVertically,
                             ) {
                                 Text(
                                     b.name, Modifier.weight(1f), fontSize = 16.sp,
                                     fontWeight = if (cur) FontWeight.Bold else FontWeight.Medium,
-                                    color = if (cur) TabBlue else Color(0xFF1A1A1A),
+                                    color = if (cur) TabBlue else Pal.cur.text,
                                 )
                                 if (cur) Text("보는 중", fontSize = 12.sp, color = TabBlue, fontWeight = FontWeight.Bold)
                             }

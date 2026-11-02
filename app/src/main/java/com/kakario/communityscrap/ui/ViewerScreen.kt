@@ -51,6 +51,9 @@ import com.kakario.communityscrap.Post
 import com.kakario.communityscrap.Current
 import com.kakario.communityscrap.Site
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.size
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.ui.text.font.FontWeight
@@ -142,6 +145,10 @@ fun ViewerScreen(start: Post?, list: List<Post>, onBack: () -> Unit) {
     var web by remember { mutableStateOf<WebView?>(null) }
     var pending by remember { mutableStateOf<String?>(null) }   // 길게 눌러 찾은 주소
     var allMedia by remember { mutableStateOf<List<String>?>(null) }
+    // 본문만 보이게 정리될 때까지 원래 페이지를 가려 둔다 (번쩍임 방지)
+    var covered by remember { mutableStateOf(Store.isolate) }
+    var isoOk by remember { mutableStateOf(false) }
+    var loadToken by remember { mutableIntStateOf(0) }
     val marked = Store.bookmarks.any { it.url == post.url }
 
     fun go(p: Post) {
@@ -198,8 +205,9 @@ fun ViewerScreen(start: Post?, list: List<Post>, onBack: () -> Unit) {
                 LinearProgressIndicator(progress = { progress / 100f }, modifier = Modifier.fillMaxWidth().height(2.dp))
             }
         }
+        Box(Modifier.fillMaxWidth().weight(1f)) {
         AndroidView(
-            modifier = Modifier.fillMaxWidth().weight(1f),
+            modifier = Modifier.fillMaxSize(),
             factory = { c ->
                 WebView(c).apply {
                     setupCommon()
@@ -226,6 +234,10 @@ fun ViewerScreen(start: Post?, list: List<Post>, onBack: () -> Unit) {
                         override fun onProgressChanged(view: WebView, newProgress: Int) {
                             progress = newProgress
                             if (newProgress > 30) WebTweaks.inject(view)
+                            if (newProgress >= 45 && covered && !isoOk) {
+                                val site = Site.forUrl(view.url ?: post.url) ?: post.site
+                                WebTweaks.isolateOnce(view, site, post.title) { ok -> if (ok) { isoOk = true; covered = false } }
+                            }
                         }
                     }
                     webViewClient = object : WebViewClient() {
@@ -244,11 +256,23 @@ fun ViewerScreen(start: Post?, list: List<Post>, onBack: () -> Unit) {
 
                         override fun onPageStarted(view: WebView, url: String?, favicon: Bitmap?) {
                             WebTweaks.inject(view)
+                            isoOk = false
+                            covered = Store.isolate && !showOriginal
+                            val token = ++loadToken
+                            // 너무 오래 걸리면 그냥 보여준다
+                            view.postDelayed({ if (token == loadToken) covered = false }, 6000)
                         }
 
                         override fun onPageFinished(view: WebView, url: String?) {
                             WebTweaks.inject(view)
-                            if (!showOriginal) WebTweaks.isolate(view, Site.forUrl(url ?: post.url) ?: post.site)
+                            if (Store.isolate && !showOriginal) {
+                                val site = Site.forUrl(url ?: post.url) ?: post.site
+                                WebTweaks.isolateOnce(view, site, post.title) { ok ->
+                                    if (ok) isoOk = true
+                                    covered = false
+                                }
+                                WebTweaks.isolateLater(view, site, post.title)
+                            } else covered = false
                             if (clearNext) { view.clearHistory(); clearNext = false }
                             CookieManager.getInstance().flush()
                         }
@@ -258,6 +282,12 @@ fun ViewerScreen(start: Post?, list: List<Post>, onBack: () -> Unit) {
                 }
             },
         )
+        if (covered) {
+            Box(Modifier.fillMaxSize().background(Pal.cur.bg), contentAlignment = Alignment.Center) {
+                CircularProgressIndicator(Modifier.size(28.dp), strokeWidth = 2.5.dp)
+            }
+        }
+        }
         HorizontalDivider(color = Line)
         Row(
             Modifier.fillMaxWidth().height(52.dp).padding(horizontal = 6.dp),

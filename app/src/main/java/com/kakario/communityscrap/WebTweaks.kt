@@ -74,26 +74,54 @@ img, video { pointer-events:auto !important; -webkit-user-drag:auto !important; 
     private val genericComment = listOf("[id*=comment]", "[class*=comment_wrap]", "[class*=comment-wrap]", "[class*=cmt]", "[class*=reply]")
 
     /** 본문·댓글만 남기고 나머지(사이트 머리말·메뉴·옆 칸·아래 글목록)를 숨긴다 */
-    private fun isolateJs(site: Site): String {
+    private fun isolateJs(site: Site, title: String): String {
         fun arr(l: List<String>) = l.joinToString(",", "[", "]") { "'" + it.replace("'", "\\'") + "'" }
+        val own = articleSel[site].orEmpty().size
+        val t = title.take(14).replace("\\", "").replace("'", "").replace("\n", " ")
         return """
-(function(A,C){
+(function(A,OWN,C,T){
   try {
-    document.querySelectorAll('[data-cs-hidden]').forEach(function(e){ e.style.removeProperty('display'); e.removeAttribute('data-cs-hidden'); });
-    function score(e){ var t=(e.innerText||'').length; return t + e.querySelectorAll('img,video,iframe').length*300; }
-    function pick(list, min){
-      for (var i=0;i<list.length;i++){
-        var best=null, bs=-1;
-        document.querySelectorAll(list[i]).forEach(function(e){ var s=score(e); if (s>bs){bs=s;best=e;} });
-        if (best && bs>=min) return best;
+    var BAD = /(^|[\s_-])(comment|cmt|reply|write|form|login|footer|header|gnb|menu|sidebar|aside)/i;
+    function bad(e){
+      for (var n=e, d=0; n && n!==document.body && d<6; n=n.parentElement, d++){
+        if (BAD.test((n.id||'')+' '+(typeof n.className==='string'?n.className:''))) return true;
+        if (n.tagName==='FORM' || n.tagName==='HEADER' || n.tagName==='NAV' || n.tagName==='FOOTER') return true;
       }
-      return null;
+      return false;
     }
-    var art = pick(A, 30);
-    if (!art || art===document.body || art.contains(document.querySelector('header,nav'))) return 'none';
+    function score(e){
+      var txt = e.innerText || '';
+      var s = txt.length + e.querySelectorAll('img,video,iframe').length*300;
+      if (T && txt.indexOf(T) >= 0) s += 3000;
+      if (e.querySelector('textarea') && txt.length < 400) s -= 2000;
+      return s;
+    }
+    document.querySelectorAll('[data-cs-hidden]').forEach(function(e){ e.style.removeProperty('display'); e.removeAttribute('data-cs-hidden'); });
+    var art=null, bs=-1;
+    for (var i=0;i<A.length;i++){
+      document.querySelectorAll(A[i]).forEach(function(e){
+        if (e===document.body || e===document.documentElement || bad(e)) return;
+        if (e.contains(document.querySelector('header,nav'))) return;
+        var s=score(e); if (i<OWN) s+=500;
+        if (s>bs){bs=s;art=e;}
+      });
+      if (i<OWN && art && bs>=600) break;
+    }
+    // 앞에서 잘 찾은 본문이 남아 있으면 그대로 쓴다 (늦게 붙는 내용 때문에 엉뚱한 곳으로 바뀌지 않게)
+    var prev = window.__csArt;
+    if (prev && document.contains(prev) && (!art || score(prev) >= bs*0.7)) { art = prev; bs = score(prev); }
+    if (!art || bs < 120) return 'none';
+    window.__csArt = art;
     var keep=[art];
-    var cm = pick(C, 0);
-    if (cm && !art.contains(cm) && !cm.contains(art)) keep.push(cm);
+    var cm=null, cs=-1;
+    for (var j=0;j<C.length && !cm;j++){
+      document.querySelectorAll(C[j]).forEach(function(e){
+        if (art.contains(e) || e.contains(art)) return;
+        var s=(e.innerText||'').length + (e.querySelector('textarea')?200:0);
+        if (s>cs){cs=s;cm=e;}
+      });
+    }
+    if (cm) keep.push(cm);
     function holds(n){ return keep.some(function(k){ return n===k || n.contains(k); }); }
     keep.forEach(function(k){
       var n=k;
@@ -108,22 +136,25 @@ img, video { pointer-events:auto !important; -webkit-user-drag:auto !important; 
       }
     });
     document.querySelectorAll('.included-article-list,.article-list,.board_list_table,.relative_list,.notice_board').forEach(function(e){
-      if (!holds(e) && !keep.some(function(k){return k.contains(e)&&k!==art;})) { e.style.setProperty('display','none','important'); e.setAttribute('data-cs-hidden','1'); }
+      if (!holds(e) && !(cm && cm.contains(e)) && !art.contains(e)) { e.style.setProperty('display','none','important'); e.setAttribute('data-cs-hidden','1'); }
     });
     document.body.style.setProperty('padding-top','0','important');
     document.body.style.setProperty('margin-top','0','important');
     keep.forEach(function(k){ k.style.setProperty('max-width','100%','important'); k.style.setProperty('margin-left','0','important'); k.style.setProperty('margin-right','0','important'); });
     return 'ok';
   } catch(e) { return 'err'; }
-})(${arr(articleSel[site].orEmpty() + genericArticle)}, ${arr(commentSel[site].orEmpty() + genericComment)});
+})(${arr(articleSel[site].orEmpty() + genericArticle)}, $own, ${arr(commentSel[site].orEmpty() + genericComment)}, '$t');
 """
     }
 
-    /** 페이지 로딩 끝난 뒤 본문만 보이게 (늦게 붙는 댓글을 위해 몇 번 반복) */
-    fun isolate(view: WebView, site: Site?) {
-        if (!Store.isolate || site == null) return
-        val js = isolateJs(site)
-        view.evaluateJavascript(js, null)
+    /** 본문만 보이게 한 번 시도. 결과(성공 여부)를 알려준다 */
+    fun isolateOnce(view: WebView, site: Site, title: String, done: (Boolean) -> Unit) {
+        view.evaluateJavascript(isolateJs(site, title)) { r -> done(r?.contains("ok") == true) }
+    }
+
+    /** 로딩이 끝난 뒤: 늦게 붙는 댓글을 위해 몇 번 더 반복 */
+    fun isolateLater(view: WebView, site: Site, title: String) {
+        val js = isolateJs(site, title)
         view.postDelayed({ view.evaluateJavascript(js, null) }, 1200)
         view.postDelayed({ view.evaluateJavascript(js, null) }, 3000)
     }

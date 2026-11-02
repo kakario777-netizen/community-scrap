@@ -14,6 +14,9 @@ import androidx.compose.material3.Typography
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.material3.Surface
 import androidx.compose.material3.lightColorScheme
+import androidx.compose.material3.darkColorScheme
+import androidx.compose.ui.graphics.toArgb
+import com.kakario.communityscrap.ui.Pal
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -59,22 +62,39 @@ class MainActivity : ComponentActivity() {
             navigationBarStyle = SystemBarStyle.light(android.graphics.Color.WHITE, android.graphics.Color.WHITE),
         )
         setContent {
+            val pal = Pal.cur
+            val view = androidx.compose.ui.platform.LocalView.current
+            androidx.compose.runtime.SideEffect {
+                val c = androidx.core.view.WindowCompat.getInsetsController(window, view)
+                c.isAppearanceLightStatusBars = !pal.dark
+                c.isAppearanceLightNavigationBars = !pal.dark
+                window.setBackgroundDrawable(android.graphics.drawable.ColorDrawable(pal.bg.toArgb()))
+                @Suppress("DEPRECATION")
+                window.navigationBarColor = pal.bg.toArgb()
+            }
+            val base = if (pal.dark) darkColorScheme() else lightColorScheme()
             MaterialTheme(
-                colorScheme = lightColorScheme(
+                colorScheme = base.copy(
                     primary = Accent,
                     onPrimary = Color.White,
-                    secondaryContainer = Color(0xFFE3EDFD),
-                    onSecondaryContainer = Color(0xFF0D3C8C),
-                    background = Color.White,
-                    surface = Color.White,
-                    surfaceContainer = Color(0xFFF6F6F6),
-                    surfaceContainerHigh = Color(0xFFF1F1F1),
+                    secondaryContainer = pal.soft,
+                    onSecondaryContainer = pal.text,
+                    background = pal.bg,
+                    onBackground = pal.text,
+                    surface = pal.bg,
+                    onSurface = pal.text,
+                    onSurfaceVariant = pal.sub,
+                    surfaceContainer = pal.card,
+                    surfaceContainerHigh = pal.card,
+                    surfaceContainerHighest = pal.card,
+                    outline = pal.line,
+                    outlineVariant = pal.line,
                 ),
                 typography = androidx.compose.runtime.remember(Store.font) { typographyWith(Fonts.family(this@MainActivity, Store.font)) },
             ) {
                 Surface(
                     Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.systemBars),
-                    color = Color.White,
+                    color = pal.bg,
                 ) {
                     val nav = rememberNavController()
                     val feed: FeedViewModel = viewModel()

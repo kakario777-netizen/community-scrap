@@ -10,6 +10,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -72,9 +73,11 @@ fun HomeScreen(
 ) {
     val ctx = LocalContext.current
     val sites = Site.entries.filter { it in Store.enabled }
-    var tab by rememberSaveable { mutableIntStateOf(0) }
-    if (tab > sites.size) tab = 0
-    val current: Site? = if (tab == 0) null else sites.getOrNull(tab - 1)
+    val tabs = Store.visibleTabs()
+    var tabKey by rememberSaveable { mutableStateOf(Store.startTab) }
+    if (tabKey !in tabs) tabKey = if (Store.startTab in tabs) Store.startTab else tabs.first()
+    val current: Site? = if (tabKey == "ALL") null else runCatching { Site.valueOf(tabKey) }.getOrNull()
+    val tab = tabs.indexOf(tabKey).coerceAtLeast(0)
 
     val isAll = current == null
     val list: List<Post> = if (current == null) feed.merged() else feed.paged[current].orEmpty()
@@ -91,8 +94,8 @@ fun HomeScreen(
             IconButton(onClick = onSettings) { Icon(Icons.Filled.Settings, "설정") }
         }
 
-        val labels = listOf("전체") + sites.map { it.label }
-        CategoryTabs(labels, tab, onSelect = { tab = it })
+        val labels = tabs.map { k -> if (k == "ALL") "전체" else Site.valueOf(k).label }
+        CategoryTabs(labels, tab, onSelect = { tabKey = tabs[it] })
         if (current != null) {
             val cats = feed.categories[current].orEmpty()
             if (cats.isNotEmpty()) {
@@ -187,7 +190,7 @@ private fun PageBtn(label: String, on: Boolean, enabled: Boolean, onClick: () ->
         onClick = { if (enabled && !on) onClick() },
         modifier = Modifier.size(40.dp),
         shape = RoundedCornerShape(8.dp),
-        color = if (on) TabBlue else Color(0xFFF2F5FB),
+        color = if (on) TabBlue else Pal.cur.soft,
         enabled = enabled || on,
     ) {
         Box(contentAlignment = Alignment.Center) {
@@ -198,7 +201,7 @@ private fun PageBtn(label: String, on: Boolean, enabled: Boolean, onClick: () ->
                 color = when {
                     on -> Color.White
                     enabled -> TabBlue
-                    else -> Color(0xFFBBBBBB)
+                    else -> Pal.cur.sub.copy(alpha = 0.5f)
                 },
             )
         }
@@ -210,7 +213,7 @@ private fun ErrorCard(site: Site, msg: String, onRetry: () -> Unit) {
     Surface(
         Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
         shape = RoundedCornerShape(10.dp),
-        color = Color(0xFFFFF4EE),
+        color = Pal.cur.card,
     ) {
         Row(
             Modifier.padding(start = 14.dp, end = 4.dp, top = 6.dp, bottom = 6.dp),
@@ -219,7 +222,7 @@ private fun ErrorCard(site: Site, msg: String, onRetry: () -> Unit) {
         ) {
             Column(Modifier.weight(1f)) {
                 SiteTag(site)
-                Text(msg, fontSize = 13.sp, color = Color(0xFF6B4A3A))
+                Text(msg, fontSize = 13.sp, color = Pal.cur.text)
             }
             TextButton(onClick = onRetry) { Text("다시") }
         }
@@ -228,27 +231,34 @@ private fun ErrorCard(site: Site, msg: String, onRetry: () -> Unit) {
 
 val TabBlue = Color(0xFF1E6BE6)
 
-/** 칸으로 나뉜 파란 분류 탭. 글자는 칸 안에 한 줄로 맞춘다 */
+/** 파란 분류 탭. 좌우로 밀 수 있고, 고른 탭이 화면 안으로 오게 맞춘다 */
 @Composable
 fun CategoryTabs(labels: List<String>, selected: Int, onSelect: (Int) -> Unit) {
-    Row(
-        Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp),
+    val rowState = rememberLazyListState()
+    LaunchedEffect(selected) { if (selected in labels.indices) rowState.animateScrollToItem(maxOf(0, selected - 1)) }
+    LazyRow(
+        Modifier.fillMaxWidth(),
+        state = rowState,
+        contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp),
         horizontalArrangement = Arrangement.spacedBy(6.dp),
     ) {
-        labels.forEachIndexed { i, l ->
+        items(labels.size) { i ->
             val on = i == selected
             Surface(
                 onClick = { onSelect(i) },
-                modifier = Modifier.weight(1f).height(38.dp),
+                modifier = Modifier.height(38.dp).widthIn(min = 76.dp),
                 shape = RoundedCornerShape(9.dp),
-                color = if (on) TabBlue else Color(0xFFEFF4FD),
-                border = if (on) null else BorderStroke(1.dp, Color(0xFFD5E2F8)),
+                color = if (on) TabBlue else Pal.cur.soft,
+                border = if (on) null else BorderStroke(1.dp, Pal.cur.softBorder),
             ) {
-                Box(Modifier.fillMaxSize().padding(horizontal = 4.dp), contentAlignment = Alignment.Center) {
-                    FitText(
-                        l,
+                Box(Modifier.padding(horizontal = 16.dp), contentAlignment = Alignment.Center) {
+                    Text(
+                        labels[i],
                         color = if (on) Color.White else TabBlue,
-                        bold = on,
+                        fontSize = 14.5.sp,
+                        fontWeight = if (on) FontWeight.Bold else FontWeight.Medium,
+                        maxLines = 1,
+                        softWrap = false,
                     )
                 }
             }
@@ -291,14 +301,14 @@ fun SubCategoryRow(cats: List<Category>, selectedUrl: String?, onSelect: (Catego
             Surface(
                 onClick = { onSelect(c) },
                 shape = RoundedCornerShape(50),
-                color = if (on) Color(0xFFE3EDFD) else Color.White,
-                border = BorderStroke(1.dp, if (on) TabBlue else Color(0xFFDDDDDD)),
+                color = if (on) Pal.cur.soft else Pal.cur.bg,
+                border = BorderStroke(1.dp, if (on) TabBlue else Pal.cur.line),
             ) {
                 Text(
                     c?.name ?: "전체",
                     Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
                     fontSize = 13.sp,
-                    color = if (on) TabBlue else Color(0xFF444444),
+                    color = if (on) TabBlue else Pal.cur.text,
                     fontWeight = if (on) FontWeight.Bold else FontWeight.Normal,
                     maxLines = 1,
                 )
