@@ -10,6 +10,15 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.tween
+import androidx.compose.foundation.gestures.detectHorizontalDragGestures
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.platform.LocalDensity
+import kotlinx.coroutines.launch
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.foundation.layout.Box
@@ -118,10 +127,47 @@ fun HomeScreen(
             if (isAll) snapshotFlow { nearEnd }.collect { if (it && !feed.refreshing) feed.loadMore(targetSites) }
         }
 
+        // 목록을 좌우로 밀면 옆 탭으로 넘어간다
+        val swipeScope = rememberCoroutineScope()
+        val dragX = remember { Animatable(0f) }
+        val width = with(LocalDensity.current) { LocalConfiguration.current.screenWidthDp.dp.toPx() }
         PullToRefreshBox(
             isRefreshing = if (isAll) feed.refreshing else false,
             onRefresh = { if (current == null) feed.refresh() else feed.openPage(current, curPage) },
-            modifier = Modifier.fillMaxSize(),
+            modifier = Modifier.fillMaxSize()
+                .pointerInput(tabs, tab) {
+                    var total = 0f
+                    detectHorizontalDragGestures(
+                        onDragStart = { total = 0f },
+                        onHorizontalDrag = { change, dx ->
+                            total += dx
+                            // 끝 탭에서 더 밀면 살짝만 움직인다
+                            val atEdge = (total > 0 && tab == 0) || (total < 0 && tab == tabs.size - 1)
+                            swipeScope.launch { dragX.snapTo(if (atEdge) total * 0.15f else total * 0.6f) }
+                            change.consume()
+                        },
+                        onDragEnd = {
+                            val goTo = when {
+                                total < -width * 0.22f && tab < tabs.size - 1 -> tab + 1
+                                total > width * 0.22f && tab > 0 -> tab - 1
+                                else -> null
+                            }
+                            swipeScope.launch {
+                                if (goTo != null) {
+                                    dragX.animateTo(if (goTo > tab) -width * 0.35f else width * 0.35f, tween(110))
+                                    tabKey = tabs[goTo]
+                                    dragX.snapTo(if (goTo > tab) width * 0.25f else -width * 0.25f)
+                                }
+                                dragX.animateTo(0f, tween(180))
+                            }
+                        },
+                        onDragCancel = { swipeScope.launch { dragX.animateTo(0f) } },
+                    )
+                }
+                .graphicsLayer {
+                    translationX = dragX.value
+                    alpha = 1f - (kotlin.math.abs(dragX.value) / width).coerceIn(0f, 0.5f)
+                },
         ) {
             LazyColumn(Modifier.fillMaxSize(), state = state) {
                 val errs = if (current == null) targetSites.mapNotNull { s -> feed.errors[s]?.let { s to it } }
@@ -231,34 +277,27 @@ private fun ErrorCard(site: Site, msg: String, onRetry: () -> Unit) {
 
 val TabBlue = Color(0xFF1E6BE6)
 
-/** 파란 분류 탭. 좌우로 밀 수 있고, 고른 탭이 화면 안으로 오게 맞춘다 */
+/** 칸으로 나뉜 파란 분류 탭. 글자는 칸 안에 한 줄로 맞춘다 */
 @Composable
 fun CategoryTabs(labels: List<String>, selected: Int, onSelect: (Int) -> Unit) {
-    val rowState = rememberLazyListState()
-    LaunchedEffect(selected) { if (selected in labels.indices) rowState.animateScrollToItem(maxOf(0, selected - 1)) }
-    LazyRow(
-        Modifier.fillMaxWidth(),
-        state = rowState,
-        contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp),
+    Row(
+        Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp),
         horizontalArrangement = Arrangement.spacedBy(6.dp),
     ) {
-        items(labels.size) { i ->
+        labels.forEachIndexed { i, l ->
             val on = i == selected
             Surface(
                 onClick = { onSelect(i) },
-                modifier = Modifier.height(38.dp).widthIn(min = 76.dp),
+                modifier = Modifier.weight(1f).height(38.dp),
                 shape = RoundedCornerShape(9.dp),
                 color = if (on) TabBlue else Pal.cur.soft,
                 border = if (on) null else BorderStroke(1.dp, Pal.cur.softBorder),
             ) {
-                Box(Modifier.padding(horizontal = 16.dp), contentAlignment = Alignment.Center) {
-                    Text(
-                        labels[i],
+                Box(Modifier.fillMaxSize().padding(horizontal = 4.dp), contentAlignment = Alignment.Center) {
+                    FitText(
+                        l,
                         color = if (on) Color.White else TabBlue,
-                        fontSize = 14.5.sp,
-                        fontWeight = if (on) FontWeight.Bold else FontWeight.Medium,
-                        maxLines = 1,
-                        softWrap = false,
+                        bold = on,
                     )
                 }
             }
