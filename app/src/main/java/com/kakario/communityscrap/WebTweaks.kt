@@ -123,18 +123,17 @@ img, video { pointer-events:auto !important; -webkit-user-drag:auto !important; 
     }
     if (cm) keep.push(cm);
     function holds(n){ return keep.some(function(k){ return n===k || n.contains(k); }); }
+    // 남길 자리와 그 위 경로에만 표시를 달고, 나머지는 CSS 규칙으로 숨긴다.
+    // 사이트가 나중에 붙이는 요소도 같은 규칙에 걸려 처음부터 안 보인다.
+    document.querySelectorAll('[data-cs-path],[data-cs-root]').forEach(function(e){ e.removeAttribute('data-cs-path'); e.removeAttribute('data-cs-root'); });
     keep.forEach(function(k){
-      var n=k;
-      while (n && n!==document.body && n.parentElement){
-        var p=n.parentElement;
-        Array.prototype.forEach.call(p.children, function(c){
-          if (holds(c) || c.tagName==='SCRIPT' || c.tagName==='STYLE' || c.tagName==='LINK') return;
-          if (keep.some(function(k2){ return k2.contains(c); })) return;
-          c.style.setProperty('display','none','important'); c.setAttribute('data-cs-hidden','1');
-        });
-        n=p;
-      }
+      k.setAttribute('data-cs-root','1');
+      for (var n=k.parentElement; n && n!==document.documentElement; n=n.parentElement) n.setAttribute('data-cs-path','1');
     });
+    var st = document.getElementById('cs-iso');
+    if (!st) { st = document.createElement('style'); st.id = 'cs-iso'; (document.head||document.documentElement).appendChild(st); }
+    st.textContent = 'body *:not([data-cs-path]):not([data-cs-root]):not([data-cs-root] *){display:none !important}' +
+      '[data-cs-path]{position:static !important;transform:none !important;padding-top:0 !important;margin-top:0 !important;min-height:0 !important}';
     document.querySelectorAll('.included-article-list,.article-list,.board_list_table,.relative_list,.notice_board').forEach(function(e){
       if (!holds(e) && !(cm && cm.contains(e)) && !art.contains(e)) { e.style.setProperty('display','none','important'); e.setAttribute('data-cs-hidden','1'); }
     });
