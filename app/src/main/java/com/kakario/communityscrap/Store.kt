@@ -41,10 +41,10 @@ object Store {
     var fontInWeb by mutableStateOf(true)
         private set
 
-    fun setFont(v: String) { font = v; prefs.edit().putString("font", v).apply() }
-    fun setAdBlock(v: Boolean) { adBlock = v; prefs.edit().putBoolean("adblock", v).apply() }
-    fun setUnlock(v: Boolean) { unlock = v; prefs.edit().putBoolean("unlock", v).apply() }
-    fun setFontInWeb(v: Boolean) { fontInWeb = v; prefs.edit().putBoolean("font_web", v).apply() }
+    fun updateFont(v: String) { font = v; prefs.edit().putString("font", v).apply() }
+    fun updateAdBlock(v: Boolean) { adBlock = v; prefs.edit().putBoolean("adblock", v).apply() }
+    fun updateUnlock(v: Boolean) { unlock = v; prefs.edit().putBoolean("unlock", v).apply() }
+    fun updateFontInWeb(v: Boolean) { fontInWeb = v; prefs.edit().putBoolean("font_web", v).apply() }
 
     fun boardName(site: Site): String =
         boardNames[site] ?: Boards.preset(site).firstOrNull { it.url == listUrl(site) }?.name ?: "직접 입력한 주소"

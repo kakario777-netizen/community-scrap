@@ -76,9 +76,9 @@ fun SettingsScreen(onLogin: (Site) -> Unit, onBack: () -> Unit) {
             SectionTitle("보기")
             Surface(shape = RoundedCornerShape(12.dp), color = Color(0xFFF7F7F7)) {
                 Column(Modifier.fillMaxWidth().padding(vertical = 6.dp)) {
-                    CheckRow("광고 차단", "글 화면의 광고를 막고 광고 칸을 숨겨요", Store.adBlock) { Store.setAdBlock(it) }
-                    CheckRow("저장 막힘 풀기", "이미지·영상을 꾹 눌러 저장할 수 있게 해요", Store.unlock) { Store.setUnlock(it) }
-                    CheckRow("글 본문에도 글꼴 적용", "아래에서 고른 글꼴을 글 화면에도 써요", Store.fontInWeb) { Store.setFontInWeb(it) }
+                    CheckRow("광고 차단", "글 화면의 광고를 막고 광고 칸을 숨겨요", Store.adBlock) { Store.updateAdBlock(it) }
+                    CheckRow("저장 막힘 풀기", "이미지·영상을 꾹 눌러 저장할 수 있게 해요", Store.unlock) { Store.updateUnlock(it) }
+                    CheckRow("글 본문에도 글꼴 적용", "아래에서 고른 글꼴을 글 화면에도 써요", Store.fontInWeb) { Store.updateFontInWeb(it) }
                 }
             }
 
@@ -89,10 +89,10 @@ fun SettingsScreen(onLogin: (Site) -> Unit, onBack: () -> Unit) {
                     fonts.forEach { f ->
                         val fam = remember(f.key) { Fonts.family(ctx, f.key) }
                         Row(
-                            Modifier.fillMaxWidth().clickable { Store.setFont(f.key) }.padding(horizontal = 8.dp),
+                            Modifier.fillMaxWidth().clickable { Store.updateFont(f.key) }.padding(horizontal = 8.dp),
                             verticalAlignment = Alignment.CenterVertically,
                         ) {
-                            RadioButton(selected = Store.font == f.key, onClick = { Store.setFont(f.key) })
+                            RadioButton(selected = Store.font == f.key, onClick = { Store.updateFont(f.key) })
                             Column(Modifier.weight(1f)) {
                                 Text(f.label, fontSize = 15.sp, fontFamily = fam, fontWeight = FontWeight.SemiBold)
                                 Text("가나다 커뮤니티 인기글 모아보기 123", fontSize = 13.sp, fontFamily = fam, color = Sub)
