@@ -24,11 +24,47 @@ object Store {
     /** 로그인 화면을 다녀오면 숫자를 올려 상태 표시를 새로 그리게 한다 */
     var loginVersion by mutableStateOf(0)
 
+    /** 고른 게시판 이름(주소별) */
+    var boardNames by mutableStateOf(emptyMap<Site, String>())
+        private set
+
+    /** 글꼴: system, nanumgothic, gowundodum, nanummyeongjo */
+    var font by mutableStateOf("system")
+        private set
+    /** 광고 차단 (기본 켜짐) */
+    var adBlock by mutableStateOf(true)
+        private set
+    /** 다운로드·복사 막힌 것 풀기 (기본 켜짐) */
+    var unlock by mutableStateOf(true)
+        private set
+    /** 글 본문에도 고른 글꼴 쓰기 */
+    var fontInWeb by mutableStateOf(true)
+        private set
+
+    fun setFont(v: String) { font = v; prefs.edit().putString("font", v).apply() }
+    fun setAdBlock(v: Boolean) { adBlock = v; prefs.edit().putBoolean("adblock", v).apply() }
+    fun setUnlock(v: Boolean) { unlock = v; prefs.edit().putBoolean("unlock", v).apply() }
+    fun setFontInWeb(v: Boolean) { fontInWeb = v; prefs.edit().putBoolean("font_web", v).apply() }
+
+    fun boardName(site: Site): String =
+        boardNames[site] ?: Boards.preset(site).firstOrNull { it.url == listUrl(site) }?.name ?: "직접 입력한 주소"
+
+    fun setBoard(site: Site, name: String, url: String) {
+        setListUrl(site, url)
+        boardNames = boardNames + (site to name)
+        prefs.edit().putString("board_${site.name}", name).apply()
+    }
+
     fun init(ctx: Context) {
         prefs = ctx.getSharedPreferences("scrap", Context.MODE_PRIVATE)
         readKeys = prefs.getStringSet("read", emptySet())!!.toSet()
         enabled = Site.entries.filter { prefs.getBoolean("on_${it.name}", true) }.toSet()
         listUrls = Site.entries.associateWith { prefs.getString("list_${it.name}", null) ?: it.defaultList }
+        boardNames = Site.entries.mapNotNull { s -> prefs.getString("board_${s.name}", null)?.let { s to it } }.toMap()
+        font = prefs.getString("font", "system") ?: "system"
+        adBlock = prefs.getBoolean("adblock", true)
+        unlock = prefs.getBoolean("unlock", true)
+        fontInWeb = prefs.getBoolean("font_web", true)
         bookmarks = runCatching {
             val arr = JSONArray(prefs.getString("bookmarks", "[]"))
             (0 until arr.length()).mapNotNull { i -> fromJson(arr.getJSONObject(i)) }
@@ -68,7 +104,8 @@ object Store {
     fun setListUrl(site: Site, url: String) {
         val v = url.trim().ifEmpty { site.defaultList }
         listUrls = listUrls + (site to v)
-        prefs.edit().putString("list_${site.name}", v).apply()
+        boardNames = boardNames - site
+        prefs.edit().putString("list_${site.name}", v).remove("board_${site.name}").apply()
     }
 
     /** 해당 사이트에 저장된 쿠키가 있는지(로그인해 둔 상태인지) */

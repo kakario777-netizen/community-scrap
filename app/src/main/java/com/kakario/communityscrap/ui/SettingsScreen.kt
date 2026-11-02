@@ -47,6 +47,17 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Delete
 import android.webkit.WebChromeClient
 import com.kakario.communityscrap.Post
+import com.kakario.communityscrap.Board
+import com.kakario.communityscrap.Boards
+import com.kakario.communityscrap.Fonts
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Checkbox
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.RadioButton
+import androidx.compose.runtime.rememberCoroutineScope
+import kotlinx.coroutines.launch
 import com.kakario.communityscrap.Site
 import com.kakario.communityscrap.Store
 
@@ -54,6 +65,7 @@ import com.kakario.communityscrap.Store
 fun SettingsScreen(onLogin: (Site) -> Unit, onBack: () -> Unit) {
     BackHandler(onBack = onBack)
     @Suppress("UNUSED_VARIABLE") val v = Store.loginVersion // 로그인 상태가 바뀌면 다시 그림
+    val ctx = LocalContext.current
 
     Column(Modifier.fillMaxSize()) {
         Bar("설정", onBack = onBack)
@@ -61,11 +73,66 @@ fun SettingsScreen(onLogin: (Site) -> Unit, onBack: () -> Unit) {
             Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(14.dp),
         ) {
+            SectionTitle("보기")
+            Surface(shape = RoundedCornerShape(12.dp), color = Color(0xFFF7F7F7)) {
+                Column(Modifier.fillMaxWidth().padding(vertical = 6.dp)) {
+                    CheckRow("광고 차단", "글 화면의 광고를 막고 광고 칸을 숨겨요", Store.adBlock) { Store.setAdBlock(it) }
+                    CheckRow("저장 막힘 풀기", "이미지·영상을 꾹 눌러 저장할 수 있게 해요", Store.unlock) { Store.setUnlock(it) }
+                    CheckRow("글 본문에도 글꼴 적용", "아래에서 고른 글꼴을 글 화면에도 써요", Store.fontInWeb) { Store.setFontInWeb(it) }
+                }
+            }
+
+            SectionTitle("글꼴")
+            Surface(shape = RoundedCornerShape(12.dp), color = Color(0xFFF7F7F7)) {
+                Column(Modifier.fillMaxWidth().padding(vertical = 6.dp)) {
+                    val fonts = Fonts.available(ctx)
+                    fonts.forEach { f ->
+                        val fam = remember(f.key) { Fonts.family(ctx, f.key) }
+                        Row(
+                            Modifier.fillMaxWidth().clickable { Store.setFont(f.key) }.padding(horizontal = 8.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            RadioButton(selected = Store.font == f.key, onClick = { Store.setFont(f.key) })
+                            Column(Modifier.weight(1f)) {
+                                Text(f.label, fontSize = 15.sp, fontFamily = fam, fontWeight = FontWeight.SemiBold)
+                                Text("가나다 커뮤니티 인기글 모아보기 123", fontSize = 13.sp, fontFamily = fam, color = Sub)
+                            }
+                        }
+                    }
+                    if (fonts.size <= 1) {
+                        Text(
+                            "추가 글꼴을 불러오지 못했어요. 다음 업데이트에서 다시 들어가요.",
+                            Modifier.padding(12.dp), fontSize = 12.sp, color = Sub,
+                        )
+                    }
+                }
+            }
+
+            SectionTitle("사이트")
             Text(
-                "아래에서 한 번 로그인해 두면, 목록을 불러올 때와 글을 볼 때 그 로그인 상태가 그대로 쓰여요.",
+                "로그인을 한 번 해 두면, 목록을 불러올 때와 글을 볼 때 그 로그인 상태가 그대로 쓰여요.",
                 fontSize = 13.sp, color = Sub, lineHeight = 19.sp,
             )
             Site.entries.forEach { site -> SiteCard(site, onLogin) }
+        }
+    }
+}
+
+@Composable
+private fun SectionTitle(t: String) {
+    Text(t, fontSize = 13.sp, fontWeight = FontWeight.Bold, color = TabBlue, modifier = Modifier.padding(top = 4.dp))
+}
+
+@Composable
+private fun CheckRow(title: String, desc: String, checked: Boolean, onChange: (Boolean) -> Unit) {
+    Row(
+        Modifier.fillMaxWidth().clickable { onChange(!checked) }.padding(horizontal = 8.dp, vertical = 2.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Checkbox(checked = checked, onCheckedChange = onChange)
+        Column(Modifier.weight(1f)) {
+            Text(title, fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
+            Text(desc, fontSize = 12.sp, color = Sub)
         }
     }
 }
@@ -75,7 +142,7 @@ private fun SiteCard(site: Site, onLogin: (Site) -> Unit) {
     val ctx = LocalContext.current
     val on = site in Store.enabled
     val logged = Store.hasLogin(site)
-    var url by remember(site, Store.listUrls) { mutableStateOf(Store.listUrl(site)) }
+    var picking by remember { mutableStateOf(false) }
 
     Surface(shape = RoundedCornerShape(12.dp), color = Color(0xFFF7F7F7)) {
         Column(Modifier.fillMaxWidth().padding(14.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -84,6 +151,14 @@ private fun SiteCard(site: Site, onLogin: (Site) -> Unit) {
                 Text(if (on) "목록에 표시" else "숨김", fontSize = 12.sp, color = Sub)
                 Spacer(Modifier.padding(4.dp))
                 Switch(checked = on, onCheckedChange = { Store.setEnabled(site, it) })
+            }
+
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Column(Modifier.weight(1f)) {
+                    Text("게시판", fontSize = 12.sp, color = Sub)
+                    Text(Store.boardName(site), fontSize = 15.sp, fontWeight = FontWeight.SemiBold, maxLines = 1)
+                }
+                OutlinedButton(onClick = { picking = true }) { Text("게시판 선택") }
             }
 
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -101,27 +176,119 @@ private fun SiteCard(site: Site, onLogin: (Site) -> Unit) {
                 }
                 Button(onClick = { onLogin(site) }) { Text(if (logged) "다시 로그인" else "로그인") }
             }
-
-            OutlinedTextField(
-                value = url,
-                onValueChange = { url = it },
-                label = { Text("가져올 게시판 주소") },
-                singleLine = true,
-                textStyle = androidx.compose.ui.text.TextStyle(fontSize = 13.sp),
-                modifier = Modifier.fillMaxWidth(),
-            )
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                TextButton(onClick = {
-                    Store.setListUrl(site, url)
-                    Toast.makeText(ctx, "저장했어요", Toast.LENGTH_SHORT).show()
-                }) { Text("주소 저장") }
-                TextButton(onClick = {
-                    url = site.defaultList
-                    Store.setListUrl(site, site.defaultList)
-                }) { Text("기본값으로") }
-            }
         }
     }
+
+    if (picking) BoardPicker(site, onClose = { picking = false })
+}
+
+/** 게시판 고르기 창: 자주 쓰는 게시판 + 사이트에서 찾은 게시판 + 주소 직접 입력 */
+@Composable
+private fun BoardPicker(site: Site, onClose: () -> Unit) {
+    val ctx = LocalContext.current
+    val scope = rememberCoroutineScope()
+    var found by remember { mutableStateOf<List<Board>>(emptyList()) }
+    var searching by remember { mutableStateOf(false) }
+    var searched by remember { mutableStateOf(false) }
+    var query by remember { mutableStateOf("") }
+    var manual by remember { mutableStateOf(false) }
+    var url by remember { mutableStateOf(Store.listUrl(site)) }
+    var bestOnly by remember { mutableStateOf(Store.listUrl(site).contains("mode=best")) }
+
+    fun pick(b: Board) {
+        var u = b.url
+        var name = b.name
+        if (site == Site.ARCA && bestOnly && b.url != "https://arca.live/b/live") {
+            u = b.url.substringBefore('?') + "?mode=best"; name = "$name (개념글)"
+        }
+        Store.setBoard(site, name, u)
+        Toast.makeText(ctx, "'$name' 게시판으로 바꿨어요", Toast.LENGTH_SHORT).show()
+        onClose()
+    }
+
+    fun search() {
+        searching = true
+        scope.launch {
+            found = Boards.discover(ctx, site)
+            searching = false
+            searched = true
+        }
+    }
+
+    AlertDialog(
+        onDismissRequest = onClose,
+        title = { Text("${site.label} 게시판 선택") },
+        text = {
+            Column(Modifier.heightIn(max = 460.dp)) {
+                OutlinedTextField(
+                    value = query, onValueChange = { query = it },
+                    placeholder = { Text("게시판 이름 검색") }, singleLine = true,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                if (site == Site.ARCA) {
+                    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.clickable { bestOnly = !bestOnly }) {
+                        Checkbox(checked = bestOnly, onCheckedChange = { bestOnly = it })
+                        Text("채널은 개념글만 보기", fontSize = 13.sp)
+                    }
+                }
+                val preset = Boards.preset(site)
+                val extra = found.filter { f -> preset.none { it.url == f.url } }
+                val q = query.trim()
+                val shown = (preset + extra).filter { q.isEmpty() || it.name.contains(q, ignoreCase = true) }
+                LazyColumn(Modifier.weight(1f, fill = false)) {
+                    items(shown, key = { it.url }) { b ->
+                        val cur = Store.listUrl(site).substringBefore('?') == b.url.substringBefore('?')
+                        Row(
+                            Modifier.fillMaxWidth().clickable { pick(b) }.padding(vertical = 11.dp, horizontal = 4.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Text(
+                                b.name, Modifier.weight(1f), fontSize = 15.sp,
+                                fontWeight = if (cur) FontWeight.Bold else FontWeight.Normal,
+                                color = if (cur) TabBlue else Color(0xFF1A1A1A),
+                            )
+                            if (b in preset) Text("추천", fontSize = 11.sp, color = Sub)
+                        }
+                        HorizontalDivider(color = Line)
+                    }
+                    item {
+                        when {
+                            searching -> Row(Modifier.fillMaxWidth().padding(12.dp), horizontalArrangement = Arrangement.Center) {
+                                CircularProgressIndicator(Modifier.height(22.dp), strokeWidth = 2.dp)
+                            }
+                            !searched -> TextButton(onClick = { search() }, modifier = Modifier.fillMaxWidth()) {
+                                Text("사이트에서 게시판 더 찾기")
+                            }
+                            extra.isEmpty() -> Text(
+                                "더 찾은 게시판이 없어요. 로그인 후 다시 해 보거나 주소를 직접 넣어 주세요.",
+                                Modifier.padding(8.dp), fontSize = 12.sp, color = Sub,
+                            )
+                        }
+                    }
+                    item {
+                        if (!manual) {
+                            TextButton(onClick = { manual = true }, modifier = Modifier.fillMaxWidth()) { Text("주소 직접 입력") }
+                        } else {
+                            Column(Modifier.padding(top = 6.dp)) {
+                                OutlinedTextField(
+                                    value = url, onValueChange = { url = it },
+                                    label = { Text("게시판 주소") }, singleLine = true,
+                                    textStyle = androidx.compose.ui.text.TextStyle(fontSize = 13.sp),
+                                    modifier = Modifier.fillMaxWidth(),
+                                )
+                                TextButton(onClick = {
+                                    Store.setListUrl(site, url)
+                                    Toast.makeText(ctx, "저장했어요", Toast.LENGTH_SHORT).show()
+                                    onClose()
+                                }) { Text("이 주소로 저장") }
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = { TextButton(onClick = onClose) { Text("닫기") } },
+    )
 }
 
 @Composable

@@ -21,6 +21,23 @@ jobs:
 
       - uses: gradle/actions/setup-gradle@v4
 
+      - name: 글꼴 받기
+        run: |
+          mkdir -p app/src/main/assets/fonts
+          git clone --depth 1 --filter=blob:none --sparse https://github.com/google/fonts.git gf
+          git -C gf sparse-checkout set ofl/nanumgothic ofl/nanummyeongjo ofl/gowundodum
+          pick() {
+            f=$(ls gf/ofl/$1/ 2>/dev/null | grep -E -- "$2" | head -1)
+            if [ -n "$f" ]; then cp "gf/ofl/$1/$f" "app/src/main/assets/fonts/$3"; echo "글꼴: $f -> $3"; else echo "없음: $1 $2"; fi
+          }
+          pick nanumgothic '-Regular\.ttf$' nanumgothic.ttf
+          pick nanumgothic '-Bold\.ttf$' nanumgothic_bold.ttf
+          pick nanummyeongjo '-Regular\.ttf$' nanummyeongjo.ttf
+          pick nanummyeongjo '-Bold\.ttf$' nanummyeongjo_bold.ttf
+          pick gowundodum '-Regular\.ttf$' gowundodum.ttf
+          ls -la app/src/main/assets/fonts
+          rm -rf gf
+
       - name: APK 만들기
         run: |
           chmod +x gradlew

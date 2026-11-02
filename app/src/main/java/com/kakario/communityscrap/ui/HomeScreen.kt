@@ -3,6 +3,12 @@
 package com.kakario.communityscrap.ui
 
 import android.widget.Toast
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.layout.height
+import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.ui.draw.drawWithContent
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -77,32 +83,7 @@ fun HomeScreen(
         }
 
         val labels = listOf("전체") + sites.map { it.label }
-        TabRow(
-            selectedTabIndex = tab,
-            containerColor = Color.White,
-            indicator = { pos ->
-                if (tab < pos.size) TabRowDefaults.SecondaryIndicator(
-                    Modifier.tabIndicatorOffset(pos[tab]),
-                    color = current?.let { Color(it.color) } ?: MaterialTheme.colorScheme.primary,
-                )
-            },
-            divider = { HorizontalDivider(color = Line) },
-        ) {
-            labels.forEachIndexed { i, l ->
-                Tab(
-                    selected = tab == i,
-                    onClick = { tab = i },
-                    text = {
-                        Text(
-                            l,
-                            fontSize = 14.sp,
-                            fontWeight = if (tab == i) FontWeight.Bold else FontWeight.Normal,
-                            color = if (tab == i) Color(0xFF1A1A1A) else Sub,
-                        )
-                    },
-                )
-            }
-        }
+        CategoryTabs(labels, tab, onSelect = { tab = it })
 
         val state = rememberLazyListState()
         LaunchedEffect(tab) { state.scrollToItem(0) }
@@ -173,4 +154,55 @@ private fun ErrorCard(site: Site, msg: String, onRetry: () -> Unit) {
             TextButton(onClick = onRetry) { Text("다시") }
         }
     }
+}
+
+val TabBlue = Color(0xFF1E6BE6)
+
+/** 칸으로 나뉜 파란 분류 탭. 글자는 칸 안에 한 줄로 맞춘다 */
+@Composable
+fun CategoryTabs(labels: List<String>, selected: Int, onSelect: (Int) -> Unit) {
+    Row(
+        Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp),
+        horizontalArrangement = Arrangement.spacedBy(6.dp),
+    ) {
+        labels.forEachIndexed { i, l ->
+            val on = i == selected
+            Surface(
+                onClick = { onSelect(i) },
+                modifier = Modifier.weight(1f).height(38.dp),
+                shape = RoundedCornerShape(9.dp),
+                color = if (on) TabBlue else Color(0xFFEFF4FD),
+                border = if (on) null else BorderStroke(1.dp, Color(0xFFD5E2F8)),
+            ) {
+                Box(Modifier.fillMaxSize().padding(horizontal = 4.dp), contentAlignment = Alignment.Center) {
+                    FitText(
+                        l,
+                        color = if (on) Color.White else TabBlue,
+                        bold = on,
+                    )
+                }
+            }
+        }
+    }
+    HorizontalDivider(color = Line)
+}
+
+/** 칸 너비에 맞춰 글자 크기를 줄여 한 줄에 딱 들어가게 */
+@Composable
+fun FitText(text: String, color: Color, bold: Boolean, maxSize: Float = 14.5f, minSize: Float = 10f) {
+    var size by remember(text) { mutableFloatStateOf(maxSize) }
+    var ready by remember(text) { mutableStateOf(false) }
+    Text(
+        text,
+        color = color,
+        fontSize = size.sp,
+        fontWeight = if (bold) FontWeight.Bold else FontWeight.Medium,
+        maxLines = 1,
+        softWrap = false,
+        textAlign = TextAlign.Center,
+        modifier = Modifier.drawWithContent { if (ready) drawContent() },
+        onTextLayout = { r ->
+            if (r.didOverflowWidth && size > minSize) size -= 0.5f else ready = true
+        },
+    )
 }

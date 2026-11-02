@@ -10,6 +10,8 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.systemBars
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Typography
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.material3.Surface
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.ui.Modifier
@@ -29,7 +31,23 @@ object Current {
     var post: Post? = null
 }
 
-val Accent = Color(0xFFE8590C)
+val Accent = Color(0xFF1E6BE6)
+
+/** 모든 글자 스타일에 고른 글꼴 적용 */
+fun typographyWith(f: FontFamily): Typography {
+    val t = Typography()
+    if (f == FontFamily.Default) return t
+    return Typography(
+        displayLarge = t.displayLarge.copy(fontFamily = f), displayMedium = t.displayMedium.copy(fontFamily = f),
+        displaySmall = t.displaySmall.copy(fontFamily = f), headlineLarge = t.headlineLarge.copy(fontFamily = f),
+        headlineMedium = t.headlineMedium.copy(fontFamily = f), headlineSmall = t.headlineSmall.copy(fontFamily = f),
+        titleLarge = t.titleLarge.copy(fontFamily = f), titleMedium = t.titleMedium.copy(fontFamily = f),
+        titleSmall = t.titleSmall.copy(fontFamily = f), bodyLarge = t.bodyLarge.copy(fontFamily = f),
+        bodyMedium = t.bodyMedium.copy(fontFamily = f), bodySmall = t.bodySmall.copy(fontFamily = f),
+        labelLarge = t.labelLarge.copy(fontFamily = f), labelMedium = t.labelMedium.copy(fontFamily = f),
+        labelSmall = t.labelSmall.copy(fontFamily = f),
+    )
+}
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -43,13 +61,14 @@ class MainActivity : ComponentActivity() {
                 colorScheme = lightColorScheme(
                     primary = Accent,
                     onPrimary = Color.White,
-                    secondaryContainer = Color(0xFFFFE8DA),
-                    onSecondaryContainer = Color(0xFF5A2200),
+                    secondaryContainer = Color(0xFFE3EDFD),
+                    onSecondaryContainer = Color(0xFF0D3C8C),
                     background = Color.White,
                     surface = Color.White,
                     surfaceContainer = Color(0xFFF6F6F6),
                     surfaceContainerHigh = Color(0xFFF1F1F1),
-                )
+                ),
+                typography = androidx.compose.runtime.remember(Store.font) { typographyWith(Fonts.family(this@MainActivity, Store.font)) },
             ) {
                 Surface(
                     Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.systemBars),
