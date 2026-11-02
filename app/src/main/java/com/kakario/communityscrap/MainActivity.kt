@@ -29,6 +29,8 @@ import com.kakario.communityscrap.ui.ViewerScreen
 /** 화면 사이에 넘겨줄 지금 보는 글 */
 object Current {
     var post: Post? = null
+    /** 이전·다음 글로 넘길 때 쓰는, 글을 연 목록 */
+    var list: List<Post> = emptyList()
 }
 
 val Accent = Color(0xFF1E6BE6)
@@ -80,17 +82,17 @@ class MainActivity : ComponentActivity() {
                         composable("home") {
                             HomeScreen(
                                 feed = feed,
-                                onOpen = { p -> Current.post = p; Store.markRead(p); nav.navigate("viewer") },
+                                onOpen = { p, list -> Current.post = p; Current.list = list; Store.markRead(p); nav.navigate("viewer") },
                                 onSettings = { nav.navigate("settings") },
                                 onBookmarks = { nav.navigate("bookmarks") },
                             )
                         }
                         composable("viewer") {
-                            ViewerScreen(Current.post, onBack = { nav.popBackStack() })
+                            ViewerScreen(Current.post, Current.list, onBack = { nav.popBackStack() })
                         }
                         composable("bookmarks") {
                             BookmarksScreen(
-                                onOpen = { p -> Current.post = p; Store.markRead(p); nav.navigate("viewer") },
+                                onOpen = { p -> Current.post = p; Current.list = Store.bookmarks; Store.markRead(p); nav.navigate("viewer") },
                                 onBack = { nav.popBackStack() },
                             )
                         }

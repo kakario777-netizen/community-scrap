@@ -41,13 +41,33 @@ object Store {
     var fontInWeb by mutableStateOf(true)
         private set
 
+    /** 글 화면에서 본문·댓글만 보이기 (기본 켜짐) */
+    var isolate by mutableStateOf(true)
+        private set
+    fun updateIsolate(v: Boolean) { isolate = v; prefs.edit().putBoolean("isolate", v).apply() }
+
     fun updateFont(v: String) { font = v; prefs.edit().putString("font", v).apply() }
     fun updateAdBlock(v: Boolean) { adBlock = v; prefs.edit().putBoolean("adblock", v).apply() }
     fun updateUnlock(v: Boolean) { unlock = v; prefs.edit().putBoolean("unlock", v).apply() }
     fun updateFontInWeb(v: Boolean) { fontInWeb = v; prefs.edit().putBoolean("font_web", v).apply() }
 
+    /** 사이트에서 찾아둔 게시판 목록 (다음에 바로 보이게 저장) */
+    fun savedBoards(site: Site): List<Board> = runCatching {
+        val arr = JSONArray(prefs.getString("boards_${site.name}", "[]"))
+        (0 until arr.length()).map { i ->
+            val o = arr.getJSONObject(i)
+            Board(o.getString("n"), o.getString("u"), o.optString("s"))
+        }
+    }.getOrDefault(emptyList())
+
+    fun saveBoards(site: Site, list: List<Board>) {
+        val arr = JSONArray()
+        list.forEach { arr.put(JSONObject().put("n", it.name).put("u", it.url).put("s", it.section)) }
+        prefs.edit().putString("boards_${site.name}", arr.toString()).apply()
+    }
+
     fun boardName(site: Site): String =
-        boardNames[site] ?: Boards.preset(site).firstOrNull { it.url == listUrl(site) }?.name ?: "직접 입력한 주소"
+        boardNames[site] ?: (Boards.preset(site) + savedBoards(site)).firstOrNull { it.url == listUrl(site) }?.name ?: "직접 입력한 주소"
 
     fun setBoard(site: Site, name: String, url: String) {
         setListUrl(site, url)
@@ -65,6 +85,7 @@ object Store {
         adBlock = prefs.getBoolean("adblock", true)
         unlock = prefs.getBoolean("unlock", true)
         fontInWeb = prefs.getBoolean("font_web", true)
+        isolate = prefs.getBoolean("isolate", true)
         bookmarks = runCatching {
             val arr = JSONArray(prefs.getString("bookmarks", "[]"))
             (0 until arr.length()).mapNotNull { i -> fromJson(arr.getJSONObject(i)) }

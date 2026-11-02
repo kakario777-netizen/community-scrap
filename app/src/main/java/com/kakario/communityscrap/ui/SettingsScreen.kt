@@ -47,6 +47,10 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Delete
 import android.webkit.WebChromeClient
 import com.kakario.communityscrap.Post
+import androidx.compose.foundation.background
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
 import com.kakario.communityscrap.Board
 import com.kakario.communityscrap.Boards
 import com.kakario.communityscrap.Fonts
@@ -77,6 +81,7 @@ fun SettingsScreen(onLogin: (Site) -> Unit, onBack: () -> Unit) {
             Surface(shape = RoundedCornerShape(12.dp), color = Color(0xFFF7F7F7)) {
                 Column(Modifier.fillMaxWidth().padding(vertical = 6.dp)) {
                     CheckRow("광고 차단", "글 화면의 광고를 막고 광고 칸을 숨겨요", Store.adBlock) { Store.updateAdBlock(it) }
+                    CheckRow("글만 깔끔하게 보기", "글 화면에서 본문과 댓글까지만 보여줘요", Store.isolate) { Store.updateIsolate(it) }
                     CheckRow("저장 막힘 풀기", "이미지·영상을 꾹 눌러 저장할 수 있게 해요", Store.unlock) { Store.updateUnlock(it) }
                     CheckRow("글 본문에도 글꼴 적용", "아래에서 고른 글꼴을 글 화면에도 써요", Store.fontInWeb) { Store.updateFontInWeb(it) }
                 }
@@ -153,12 +158,20 @@ private fun SiteCard(site: Site, onLogin: (Site) -> Unit) {
                 Switch(checked = on, onCheckedChange = { Store.setEnabled(site, it) })
             }
 
-            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                Column(Modifier.weight(1f)) {
-                    Text("게시판", fontSize = 12.sp, color = Sub)
-                    Text(Store.boardName(site), fontSize = 15.sp, fontWeight = FontWeight.SemiBold, maxLines = 1)
+            // 눈에 잘 띄는 게시판 고르기 버튼
+            Surface(
+                onClick = { picking = true },
+                shape = RoundedCornerShape(10.dp),
+                color = Color(0xFFE9F1FE),
+                border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFFC6DAFA)),
+            ) {
+                Row(Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 12.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Column(Modifier.weight(1f)) {
+                        Text("보고 있는 게시판", fontSize = 12.sp, color = TabBlue)
+                        Text(Store.boardName(site), fontSize = 17.sp, fontWeight = FontWeight.Bold, color = Color(0xFF14284B), maxLines = 1)
+                    }
+                    Text("바꾸기  ›", fontSize = 14.sp, fontWeight = FontWeight.SemiBold, color = TabBlue)
                 }
-                OutlinedButton(onClick = { picking = true }) { Text("게시판 선택") }
             }
 
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -182,18 +195,18 @@ private fun SiteCard(site: Site, onLogin: (Site) -> Unit) {
     if (picking) BoardPicker(site, onClose = { picking = false })
 }
 
-/** 게시판 고르기 창: 자주 쓰는 게시판 + 사이트에서 찾은 게시판 + 주소 직접 입력 */
+/** 게시판 고르기: 전체 화면. 추천 → 사이트 구역별(취미·커뮤니티·게임 …) 목록, 검색, 주소 직접 입력 */
 @Composable
 private fun BoardPicker(site: Site, onClose: () -> Unit) {
     val ctx = LocalContext.current
     val scope = rememberCoroutineScope()
-    var found by remember { mutableStateOf<List<Board>>(emptyList()) }
+    var found by remember { mutableStateOf(Store.savedBoards(site)) }
     var searching by remember { mutableStateOf(false) }
-    var searched by remember { mutableStateOf(false) }
     var query by remember { mutableStateOf("") }
     var manual by remember { mutableStateOf(false) }
     var url by remember { mutableStateOf(Store.listUrl(site)) }
     var bestOnly by remember { mutableStateOf(Store.listUrl(site).contains("mode=best")) }
+    val curUrl = Store.listUrl(site).substringBefore('?')
 
     fun pick(b: Board) {
         var u = b.url
@@ -206,70 +219,84 @@ private fun BoardPicker(site: Site, onClose: () -> Unit) {
         onClose()
     }
 
-    fun search() {
+    // 열 때마다 사이트 메뉴를 새로 읽어 목록을 갱신(저장된 목록은 바로 보여줌)
+    LaunchedEffect(site) {
         searching = true
-        scope.launch {
-            found = Boards.discover(ctx, site)
-            searching = false
-            searched = true
-        }
+        val fresh = runCatching { Boards.discover(ctx, site) }.getOrDefault(emptyList())
+        if (fresh.isNotEmpty()) { found = fresh; Store.saveBoards(site, fresh) }
+        searching = false
     }
 
-    AlertDialog(
-        onDismissRequest = onClose,
-        title = { Text("${site.label} 게시판 선택") },
-        text = {
-            Column(Modifier.heightIn(max = 460.dp)) {
+    Dialog(onDismissRequest = onClose, properties = DialogProperties(usePlatformDefaultWidth = false)) {
+        Surface(Modifier.fillMaxSize(), color = Color.White) {
+            Column(Modifier.fillMaxSize()) {
+                Bar("${site.label} 게시판 고르기", onBack = onClose)
                 OutlinedTextField(
                     value = query, onValueChange = { query = it },
-                    placeholder = { Text("게시판 이름 검색") }, singleLine = true,
-                    modifier = Modifier.fillMaxWidth(),
+                    placeholder = { Text("게시판 이름 검색 (예: 피규어)") }, singleLine = true,
+                    shape = RoundedCornerShape(10.dp),
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 8.dp),
                 )
                 if (site == Site.ARCA) {
-                    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.clickable { bestOnly = !bestOnly }) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier.padding(horizontal = 6.dp).clickable { bestOnly = !bestOnly },
+                    ) {
                         Checkbox(checked = bestOnly, onCheckedChange = { bestOnly = it })
-                        Text("채널은 개념글만 보기", fontSize = 13.sp)
+                        Text("채널은 개념글만 보기", fontSize = 14.sp)
                     }
                 }
+                if (searching) {
+                    LinearProgressIndicator(Modifier.fillMaxWidth().height(2.dp), color = TabBlue)
+                }
+
                 val preset = Boards.preset(site)
-                val extra = found.filter { f -> preset.none { it.url == f.url } }
                 val q = query.trim()
-                val shown = (preset + extra).filter { q.isEmpty() || it.name.contains(q, ignoreCase = true) }
-                LazyColumn(Modifier.weight(1f, fill = false)) {
-                    items(shown, key = { it.url }) { b ->
-                        val cur = Store.listUrl(site).substringBefore('?') == b.url.substringBefore('?')
-                        Row(
-                            Modifier.fillMaxWidth().clickable { pick(b) }.padding(vertical = 11.dp, horizontal = 4.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                        ) {
+                fun match(b: Board) = q.isEmpty() || b.name.contains(q, ignoreCase = true) || b.section.contains(q)
+                val groups: List<Pair<String, List<Board>>> = buildList {
+                    preset.filter(::match).takeIf { it.isNotEmpty() }?.let { add("추천" to it) }
+                    found.filter { f -> preset.none { it.url == f.url } && match(f) }
+                        .groupBy { it.section.ifEmpty { "게시판" } }
+                        .forEach { (sec, l) -> add(sec to l) }
+                }
+
+                LazyColumn(Modifier.weight(1f)) {
+                    groups.forEach { (sec, boards) ->
+                        item(key = "h_$sec") {
                             Text(
-                                b.name, Modifier.weight(1f), fontSize = 15.sp,
-                                fontWeight = if (cur) FontWeight.Bold else FontWeight.Normal,
-                                color = if (cur) TabBlue else Color(0xFF1A1A1A),
-                            )
-                            if (b in preset) Text("추천", fontSize = 11.sp, color = Sub)
-                        }
-                        HorizontalDivider(color = Line)
-                    }
-                    item {
-                        when {
-                            searching -> Row(Modifier.fillMaxWidth().padding(12.dp), horizontalArrangement = Arrangement.Center) {
-                                CircularProgressIndicator(Modifier.height(22.dp), strokeWidth = 2.dp)
-                            }
-                            !searched -> TextButton(onClick = { search() }, modifier = Modifier.fillMaxWidth()) {
-                                Text("사이트에서 게시판 더 찾기")
-                            }
-                            extra.isEmpty() -> Text(
-                                "더 찾은 게시판이 없어요. 로그인 후 다시 해 보거나 주소를 직접 넣어 주세요.",
-                                Modifier.padding(8.dp), fontSize = 12.sp, color = Sub,
+                                "$sec  ${boards.size}",
+                                Modifier.fillMaxWidth().background(Color(0xFFF3F6FB)).padding(horizontal = 16.dp, vertical = 8.dp),
+                                fontSize = 13.sp, fontWeight = FontWeight.Bold, color = TabBlue,
                             )
                         }
+                        items(boards, key = { sec + it.url }) { b ->
+                            val cur = curUrl == b.url.substringBefore('?')
+                            Row(
+                                Modifier.fillMaxWidth().clickable { pick(b) }
+                                    .background(if (cur) Color(0xFFE9F1FE) else Color.White)
+                                    .padding(horizontal = 16.dp, vertical = 14.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                            ) {
+                                Text(
+                                    b.name, Modifier.weight(1f), fontSize = 16.sp,
+                                    fontWeight = if (cur) FontWeight.Bold else FontWeight.Medium,
+                                    color = if (cur) TabBlue else Color(0xFF1A1A1A),
+                                )
+                                if (cur) Text("보는 중", fontSize = 12.sp, color = TabBlue, fontWeight = FontWeight.Bold)
+                            }
+                            HorizontalDivider(color = Line, modifier = Modifier.padding(start = 16.dp))
+                        }
                     }
-                    item {
-                        if (!manual) {
-                            TextButton(onClick = { manual = true }, modifier = Modifier.fillMaxWidth()) { Text("주소 직접 입력") }
-                        } else {
-                            Column(Modifier.padding(top = 6.dp)) {
+                    item(key = "tail") {
+                        Column(Modifier.fillMaxWidth().padding(16.dp)) {
+                            if (searching) Text("사이트에서 게시판 목록을 불러오는 중이에요…", fontSize = 13.sp, color = Sub)
+                            else if (found.isEmpty()) Text(
+                                "사이트 게시판 목록을 못 불러왔어요. 로그인 후 다시 열어 보거나 주소를 직접 넣어 주세요.",
+                                fontSize = 13.sp, color = Sub,
+                            )
+                            if (!manual) {
+                                TextButton(onClick = { manual = true }) { Text("주소 직접 입력") }
+                            } else {
                                 OutlinedTextField(
                                     value = url, onValueChange = { url = it },
                                     label = { Text("게시판 주소") }, singleLine = true,
@@ -286,9 +313,8 @@ private fun BoardPicker(site: Site, onClose: () -> Unit) {
                     }
                 }
             }
-        },
-        confirmButton = { TextButton(onClick = onClose) { Text("닫기") } },
-    )
+        }
+    }
 }
 
 @Composable

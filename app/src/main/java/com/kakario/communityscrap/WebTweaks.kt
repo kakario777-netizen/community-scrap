@@ -59,6 +59,75 @@ img, video { pointer-events:auto !important; -webkit-user-drag:auto !important; 
 })();
 """
 
+    /** 사이트별 본문·댓글 자리 (앞에 있는 것부터 찾아본다) */
+    private val articleSel = mapOf(
+        Site.ARCA to listOf(".article-wrapper", ".article-body", ".article-content"),
+        Site.RULIWEB to listOf(".board_main_view", "#board_read", ".board_main", ".view_content"),
+        Site.GOODGAG to listOf("article", ".view_wrap", ".view", ".post_view", ".board_view", "[class*=view_]"),
+    )
+    private val commentSel = mapOf(
+        Site.ARCA to listOf("#comment", ".article-comment", ".list-area"),
+        Site.RULIWEB to listOf(".comment_view_wrapper", "#cmt", ".comment_wrapper", ".comment_view"),
+        Site.GOODGAG to listOf("#comment", "#comments", ".comment_wrap", ".comment-area", ".comments"),
+    )
+    private val genericArticle = listOf("article", "[class*=article]", "[class*=view_cont]", "[class*=post_cont]", "[class*=read_body]", "main")
+    private val genericComment = listOf("[id*=comment]", "[class*=comment_wrap]", "[class*=comment-wrap]", "[class*=cmt]", "[class*=reply]")
+
+    /** 본문·댓글만 남기고 나머지(사이트 머리말·메뉴·옆 칸·아래 글목록)를 숨긴다 */
+    private fun isolateJs(site: Site): String {
+        fun arr(l: List<String>) = l.joinToString(",", "[", "]") { "'" + it.replace("'", "\\'") + "'" }
+        return """
+(function(A,C){
+  try {
+    document.querySelectorAll('[data-cs-hidden]').forEach(function(e){ e.style.removeProperty('display'); e.removeAttribute('data-cs-hidden'); });
+    function score(e){ var t=(e.innerText||'').length; return t + e.querySelectorAll('img,video,iframe').length*300; }
+    function pick(list, min){
+      for (var i=0;i<list.length;i++){
+        var best=null, bs=-1;
+        document.querySelectorAll(list[i]).forEach(function(e){ var s=score(e); if (s>bs){bs=s;best=e;} });
+        if (best && bs>=min) return best;
+      }
+      return null;
+    }
+    var art = pick(A, 30);
+    if (!art || art===document.body || art.contains(document.querySelector('header,nav'))) return 'none';
+    var keep=[art];
+    var cm = pick(C, 0);
+    if (cm && !art.contains(cm) && !cm.contains(art)) keep.push(cm);
+    function holds(n){ return keep.some(function(k){ return n===k || n.contains(k); }); }
+    keep.forEach(function(k){
+      var n=k;
+      while (n && n!==document.body && n.parentElement){
+        var p=n.parentElement;
+        Array.prototype.forEach.call(p.children, function(c){
+          if (holds(c) || c.tagName==='SCRIPT' || c.tagName==='STYLE' || c.tagName==='LINK') return;
+          if (keep.some(function(k2){ return k2.contains(c); })) return;
+          c.style.setProperty('display','none','important'); c.setAttribute('data-cs-hidden','1');
+        });
+        n=p;
+      }
+    });
+    document.querySelectorAll('.included-article-list,.article-list,.board_list_table,.relative_list,.notice_board').forEach(function(e){
+      if (!holds(e) && !keep.some(function(k){return k.contains(e)&&k!==art;})) { e.style.setProperty('display','none','important'); e.setAttribute('data-cs-hidden','1'); }
+    });
+    document.body.style.setProperty('padding-top','0','important');
+    document.body.style.setProperty('margin-top','0','important');
+    keep.forEach(function(k){ k.style.setProperty('max-width','100%','important'); k.style.setProperty('margin-left','0','important'); k.style.setProperty('margin-right','0','important'); });
+    return 'ok';
+  } catch(e) { return 'err'; }
+})(${arr(articleSel[site].orEmpty() + genericArticle)}, ${arr(commentSel[site].orEmpty() + genericComment)});
+"""
+    }
+
+    /** 페이지 로딩 끝난 뒤 본문만 보이게 (늦게 붙는 댓글을 위해 몇 번 반복) */
+    fun isolate(view: WebView, site: Site?) {
+        if (!Store.isolate || site == null) return
+        val js = isolateJs(site)
+        view.evaluateJavascript(js, null)
+        view.postDelayed({ view.evaluateJavascript(js, null) }, 1200)
+        view.postDelayed({ view.evaluateJavascript(js, null) }, 3000)
+    }
+
     const val FONT_HOST = "cs-font.local"
 
     private fun fontCss(file: String) = """

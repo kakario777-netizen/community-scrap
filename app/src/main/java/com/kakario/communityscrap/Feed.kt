@@ -28,6 +28,46 @@ class FeedViewModel(app: Application) : AndroidViewModel(app) {
     var refreshing by mutableStateOf(false)
         private set
 
+    /** 사이트 탭: 번호 페이지로 보는 목록 */
+    val paged = mutableStateMapOf<Site, List<Post>>()
+    val pageNo = mutableStateMapOf<Site, Int>()
+    val pageLoading = mutableStateMapOf<Site, Boolean>()
+    val pageError = mutableStateMapOf<Site, String>()
+    private val pagedBase = mutableMapOf<Site, String>()
+
+    /** 지금 보는 게시판(소분류 포함) 주소 */
+    private fun baseOf(site: Site): String {
+        val board = Store.listUrl(site)
+        if (catBoard[site] != null && catBoard[site] != board) {
+            categories.remove(site); selectedCat.remove(site); catBoard.remove(site)
+        }
+        return selectedCat[site] ?: board
+    }
+
+    /** 사이트 탭을 열었을 때: 페이지 목록이 없거나 게시판이 바뀌었으면 1페이지 */
+    fun ensurePaged(site: Site) {
+        val base = baseOf(site)
+        if (paged[site] == null || pagedBase[site] != base) openPage(site, 1)
+    }
+
+    fun openPage(site: Site, n: Int) {
+        if (n < 1 || pageLoading[site] == true) return
+        pageLoading[site] = true
+        pageError.remove(site)
+        viewModelScope.launch {
+            val base = baseOf(site)
+            val got = fetch(site, site.pageUrl(base, n), wantCats = n == 1 || categories[site] == null)
+            if (got == null) pageError[site] = "불러오지 못했어요. 주소나 로그인 상태를 확인해 주세요."
+            else if (got.isEmpty()) pageError[site] = if (n == 1) "글을 찾지 못했어요. 게시판을 확인해 주세요." else "이 페이지에는 글이 없어요."
+            if (got != null && (got.isNotEmpty() || n == 1)) {
+                paged[site] = got
+                pageNo[site] = n
+                pagedBase[site] = base
+            }
+            pageLoading[site] = false
+        }
+    }
+
     init { refresh() }
 
     fun refresh() {
@@ -47,6 +87,8 @@ class FeedViewModel(app: Application) : AndroidViewModel(app) {
     fun selectCategory(site: Site, cat: Category?) {
         if (cat == null) selectedCat.remove(site) else selectedCat[site] = cat.url
         posts.remove(site)
+        paged.remove(site)
+        openPage(site, 1)
         viewModelScope.launch { loadPage(site, 1) }
     }
 
@@ -60,12 +102,7 @@ class FeedViewModel(app: Application) : AndroidViewModel(app) {
         if (loading[site] == true) return
         loading[site] = true
         if (page == 1) errors.remove(site)
-        val board = Store.listUrl(site)
-        // 설정에서 게시판을 바꿨으면 소분류도 새로
-        if (catBoard[site] != null && catBoard[site] != board) {
-            categories.remove(site); selectedCat.remove(site); catBoard.remove(site)
-        }
-        val base = selectedCat[site] ?: board
+        val base = baseOf(site)
         val url = site.pageUrl(base, page)
         val got = fetch(site, url, wantCats = page == 1)
         if (got == null) {

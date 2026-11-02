@@ -48,6 +48,13 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import com.kakario.communityscrap.Post
+import com.kakario.communityscrap.Current
+import com.kakario.communityscrap.Site
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.padding
+import androidx.compose.material3.HorizontalDivider
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.sp
 import com.kakario.communityscrap.Saver
 import com.kakario.communityscrap.Store
 import com.kakario.communityscrap.WebTweaks
@@ -118,18 +125,32 @@ private const val ALL_MEDIA_JS = """
 """
 
 @Composable
-fun ViewerScreen(post: Post?, onBack: () -> Unit) {
+fun ViewerScreen(start: Post?, list: List<Post>, onBack: () -> Unit) {
     val ctx = LocalContext.current
     val scope = rememberCoroutineScope()
-    if (post == null) {
+    if (start == null) {
         Column { Bar("글 보기", onBack = onBack) }
         return
     }
+    var post by remember { mutableStateOf<Post>(start) }
+    var clearNext by remember { mutableStateOf(false) }
+    var showOriginal by remember { mutableStateOf(false) }
+    val idx = list.indexOfFirst { it.url == post.url }
+    val prev = if (idx > 0) list[idx - 1] else null
+    val next = if (idx >= 0 && idx < list.size - 1) list[idx + 1] else null
     var progress by remember { mutableIntStateOf(0) }
     var web by remember { mutableStateOf<WebView?>(null) }
     var pending by remember { mutableStateOf<String?>(null) }   // 길게 눌러 찾은 주소
     var allMedia by remember { mutableStateOf<List<String>?>(null) }
     val marked = Store.bookmarks.any { it.url == post.url }
+
+    fun go(p: Post) {
+        post = p
+        Current.post = p
+        Store.markRead(p)
+        clearNext = true
+        web?.loadUrl(p.url)
+    }
 
     fun saveOne(url: String) {
         val page = web?.url ?: post.url
@@ -178,7 +199,7 @@ fun ViewerScreen(post: Post?, onBack: () -> Unit) {
             }
         }
         AndroidView(
-            modifier = Modifier.fillMaxSize(),
+            modifier = Modifier.fillMaxWidth().weight(1f),
             factory = { c ->
                 WebView(c).apply {
                     setupCommon()
@@ -227,6 +248,8 @@ fun ViewerScreen(post: Post?, onBack: () -> Unit) {
 
                         override fun onPageFinished(view: WebView, url: String?) {
                             WebTweaks.inject(view)
+                            if (!showOriginal) WebTweaks.isolate(view, Site.forUrl(url ?: post.url) ?: post.site)
+                            if (clearNext) { view.clearHistory(); clearNext = false }
                             CookieManager.getInstance().flush()
                         }
                     }
@@ -235,6 +258,24 @@ fun ViewerScreen(post: Post?, onBack: () -> Unit) {
                 }
             },
         )
+        HorizontalDivider(color = Line)
+        Row(
+            Modifier.fillMaxWidth().height(52.dp).padding(horizontal = 6.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            TextButton(onClick = { prev?.let { go(it) } }, enabled = prev != null, modifier = Modifier.weight(1f)) {
+                Text("‹  이전 글", fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
+            }
+            TextButton(onClick = {
+                showOriginal = !showOriginal
+                web?.reload()
+            }) {
+                Text(if (showOriginal) "본문만" else "원본", fontSize = 13.sp, color = Sub)
+            }
+            TextButton(onClick = { next?.let { go(it) } }, enabled = next != null, modifier = Modifier.weight(1f)) {
+                Text("다음 글  ›", fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
+            }
+        }
     }
 
     pending?.let { url ->

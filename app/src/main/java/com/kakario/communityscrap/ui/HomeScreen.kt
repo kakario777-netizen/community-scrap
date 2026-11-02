@@ -10,6 +10,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -65,7 +66,7 @@ import com.kakario.communityscrap.Store
 @Composable
 fun HomeScreen(
     feed: FeedViewModel,
-    onOpen: (Post) -> Unit,
+    onOpen: (Post, List<Post>) -> Unit,
     onSettings: () -> Unit,
     onBookmarks: () -> Unit,
 ) {
@@ -75,9 +76,14 @@ fun HomeScreen(
     if (tab > sites.size) tab = 0
     val current: Site? = if (tab == 0) null else sites.getOrNull(tab - 1)
 
-    val list: List<Post> = if (current == null) feed.merged() else feed.posts[current].orEmpty()
+    val isAll = current == null
+    val list: List<Post> = if (current == null) feed.merged() else feed.paged[current].orEmpty()
     val targetSites = if (current == null) sites else listOf(current)
-    val anyLoading = targetSites.any { feed.loading[it] == true }
+    val anyLoading = if (current == null) targetSites.any { feed.loading[it] == true } else feed.pageLoading[current] == true
+    val curPage = current?.let { feed.pageNo[it] } ?: 1
+
+    // 사이트 탭은 번호 페이지 목록을 쓴다
+    LaunchedEffect(current, current?.let { Store.listUrl(it) }) { current?.let { feed.ensurePaged(it) } }
 
     Column(Modifier.fillMaxSize()) {
         Bar("커뮤 모아") {
@@ -95,9 +101,9 @@ fun HomeScreen(
         }
 
         val state = rememberLazyListState()
-        LaunchedEffect(tab, current?.let { feed.selectedCat[it] }) { state.scrollToItem(0) }
+        LaunchedEffect(tab, current?.let { feed.selectedCat[it] }, curPage) { state.scrollToItem(0) }
 
-        // 끝 근처까지 내리면 다음 페이지를 자동으로 불러온다
+        // 전체 탭: 끝 근처까지 내리면 다음 페이지를 자동으로 불러온다
         val nearEnd by remember {
             derivedStateOf {
                 val info = state.layoutInfo
@@ -106,24 +112,30 @@ fun HomeScreen(
             }
         }
         LaunchedEffect(state, tab) {
-            snapshotFlow { nearEnd }.collect { if (it && !feed.refreshing) feed.loadMore(targetSites) }
+            if (isAll) snapshotFlow { nearEnd }.collect { if (it && !feed.refreshing) feed.loadMore(targetSites) }
         }
 
         PullToRefreshBox(
-            isRefreshing = feed.refreshing,
-            onRefresh = { feed.refresh() },
+            isRefreshing = if (isAll) feed.refreshing else false,
+            onRefresh = { if (current == null) feed.refresh() else feed.openPage(current, curPage) },
             modifier = Modifier.fillMaxSize(),
         ) {
             LazyColumn(Modifier.fillMaxSize(), state = state) {
-                val errs = targetSites.mapNotNull { s -> feed.errors[s]?.let { s to it } }
+                val errs = if (current == null) targetSites.mapNotNull { s -> feed.errors[s]?.let { s to it } }
+                else listOfNotNull(feed.pageError[current]?.let { current to it })
                 items(errs, key = { "err_" + it.first.name }) { (s, msg) ->
-                    ErrorCard(s, msg, onRetry = { feed.refreshSite(s) })
+                    ErrorCard(s, msg, onRetry = { if (current == null) feed.refreshSite(s) else feed.openPage(s, curPage) })
+                }
+                if (current != null && anyLoading && list.isNotEmpty()) {
+                    item(key = "toploading") {
+                        LinearProgressIndicator(Modifier.fillMaxWidth().height(2.dp), color = TabBlue)
+                    }
                 }
                 items(list, key = { it.key }) { p ->
                     PostRow(
                         p,
                         showSite = current == null,
-                        onClick = { onOpen(p) },
+                        onClick = { onOpen(p, list) },
                         onLong = {
                             val on = Store.toggleBookmark(p)
                             Toast.makeText(ctx, if (on) "북마크에 담았어요" else "북마크에서 뺐어요", Toast.LENGTH_SHORT).show()
@@ -131,15 +143,64 @@ fun HomeScreen(
                     )
                 }
                 item(key = "footer") {
-                    Box(Modifier.fillMaxWidth().padding(20.dp), contentAlignment = Alignment.Center) {
-                        when {
-                            anyLoading -> CircularProgressIndicator(Modifier.size(24.dp), strokeWidth = 2.5.dp)
-                            list.isEmpty() && errs.isEmpty() -> Text("당겨서 새로고침", color = Sub, fontSize = 13.sp)
-                            list.isNotEmpty() -> TextButton(onClick = { feed.loadMore(targetSites) }) { Text("더 보기") }
+                    if (current != null) {
+                        Column(Modifier.fillMaxWidth().padding(vertical = 14.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                            if (anyLoading && list.isEmpty()) CircularProgressIndicator(Modifier.size(24.dp), strokeWidth = 2.5.dp)
+                            PagerBar(curPage, enabled = !anyLoading, onGo = { feed.openPage(current, it) })
+                        }
+                    } else {
+                        Box(Modifier.fillMaxWidth().padding(20.dp), contentAlignment = Alignment.Center) {
+                            when {
+                                anyLoading -> CircularProgressIndicator(Modifier.size(24.dp), strokeWidth = 2.5.dp)
+                                list.isEmpty() && errs.isEmpty() -> Text("당겨서 새로고침", color = Sub, fontSize = 13.sp)
+                                list.isNotEmpty() -> TextButton(onClick = { feed.loadMore(targetSites) }) { Text("더 보기") }
+                            }
                         }
                     }
                 }
             }
+        }
+    }
+}
+
+/** 페이지 번호 줄: ‹ 1 2 3 4 5 › */
+@Composable
+fun PagerBar(cur: Int, enabled: Boolean, onGo: (Int) -> Unit) {
+    val start = ((cur - 1) / 5) * 5 + 1
+    Row(
+        Modifier.padding(horizontal = 8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(4.dp),
+    ) {
+        PageBtn("‹", on = false, enabled = enabled && cur > 1) { onGo(cur - 1) }
+        for (n in start until start + 5) {
+            PageBtn(n.toString(), on = n == cur, enabled = enabled) { onGo(n) }
+        }
+        PageBtn("›", on = false, enabled = enabled) { onGo(cur + 1) }
+    }
+    Text("$cur 페이지", Modifier.padding(top = 6.dp), fontSize = 11.sp, color = Sub)
+}
+
+@Composable
+private fun PageBtn(label: String, on: Boolean, enabled: Boolean, onClick: () -> Unit) {
+    Surface(
+        onClick = { if (enabled && !on) onClick() },
+        modifier = Modifier.size(40.dp),
+        shape = RoundedCornerShape(8.dp),
+        color = if (on) TabBlue else Color(0xFFF2F5FB),
+        enabled = enabled || on,
+    ) {
+        Box(contentAlignment = Alignment.Center) {
+            Text(
+                label,
+                fontSize = if (label.length == 1 && !label[0].isDigit()) 20.sp else 14.sp,
+                fontWeight = if (on) FontWeight.Bold else FontWeight.Medium,
+                color = when {
+                    on -> Color.White
+                    enabled -> TabBlue
+                    else -> Color(0xFFBBBBBB)
+                },
+            )
         }
     }
 }
