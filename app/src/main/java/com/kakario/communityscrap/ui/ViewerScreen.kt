@@ -230,13 +230,36 @@ fun ViewerScreen(start: Post?, list: List<Post>, onBack: () -> Unit) {
                         // 이미지 위에서는 기본 메뉴 대신 저장 창만 띄운다
                         isImage
                     }
+                    // 본문 정리가 실제 화면에 그려진 뒤에야 가림막을 걷는다 (걷는 순간 옛 화면이 보이지 않게)
+                    fun reveal(view: WebView) {
+                        val token = loadToken
+                        view.postVisualStateCallback(token.toLong(), object : WebView.VisualStateCallback() {
+                            override fun onComplete(requestId: Long) {
+                                view.postDelayed({ if (token == loadToken && isoOk) covered = false }, 60)
+                            }
+                        })
+                    }
+                    // 정리가 안 되면 조금 뒤 다시 시도, 끝내 안 되면 원본을 보여준다
+                    fun tryIsolate(view: WebView, url: String?, left: Int) {
+                        val token = loadToken
+                        val site = Site.forUrl(url ?: post.url) ?: post.site
+                        WebTweaks.isolateOnce(view, site, post.title) { ok ->
+                            if (token != loadToken) return@isolateOnce
+                            if (ok) { isoOk = true; reveal(view) }
+                            else if (left > 0) view.postDelayed({ if (token == loadToken && !isoOk) tryIsolate(view, url, left - 1) }, 500)
+                            else covered = false
+                        }
+                    }
                     webChromeClient = object : WebChromeClient() {
                         override fun onProgressChanged(view: WebView, newProgress: Int) {
                             progress = newProgress
                             if (newProgress > 30) WebTweaks.inject(view)
                             if (newProgress >= 45 && covered && !isoOk) {
                                 val site = Site.forUrl(view.url ?: post.url) ?: post.site
-                                WebTweaks.isolateOnce(view, site, post.title) { ok -> if (ok) { isoOk = true; covered = false } }
+                                val token = loadToken
+                                WebTweaks.isolateOnce(view, site, post.title) { ok ->
+                                    if (ok && token == loadToken && !isoOk) { isoOk = true; reveal(view) }
+                                }
                             }
                         }
                     }
@@ -260,17 +283,14 @@ fun ViewerScreen(start: Post?, list: List<Post>, onBack: () -> Unit) {
                             covered = Store.isolate && !showOriginal
                             val token = ++loadToken
                             // 너무 오래 걸리면 그냥 보여준다
-                            view.postDelayed({ if (token == loadToken) covered = false }, 6000)
+                            view.postDelayed({ if (token == loadToken) covered = false }, 8000)
                         }
 
                         override fun onPageFinished(view: WebView, url: String?) {
                             WebTweaks.inject(view)
                             if (Store.isolate && !showOriginal) {
                                 val site = Site.forUrl(url ?: post.url) ?: post.site
-                                WebTweaks.isolateOnce(view, site, post.title) { ok ->
-                                    if (ok) isoOk = true
-                                    covered = false
-                                }
+                                if (!isoOk) tryIsolate(view, url, 4)
                                 WebTweaks.isolateLater(view, site, post.title)
                             } else covered = false
                             if (clearNext) { view.clearHistory(); clearNext = false }
