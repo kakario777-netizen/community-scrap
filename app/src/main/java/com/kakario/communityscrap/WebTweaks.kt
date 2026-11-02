@@ -64,11 +64,17 @@ img, video { pointer-events:auto !important; -webkit-user-drag:auto !important; 
         Site.ARCA to listOf(".article-wrapper", ".article-body", ".article-content"),
         Site.RULIWEB to listOf(".board_main_view", "#board_read", ".board_main", ".view_content"),
         Site.GOODGAG to listOf("article", ".view_wrap", ".view", ".post_view", ".board_view", "[class*=view_]"),
+        Site.DCINSIDE to listOf(".view_content_wrap", ".gallview_contents", ".writing_view_box", ".gall-thum-btm", ".thum-txtin"),
+        Site.FMKOREA to listOf(".rd", "article", ".rd_body", ".xe_content"),
+        Site.BOBAEDREAM to listOf(".writerProfile + .bodyCont", ".content02", ".bodyCont", ".article-body", ".view-body"),
     )
     private val commentSel = mapOf(
         Site.ARCA to listOf("#comment", ".article-comment", ".list-area"),
         Site.RULIWEB to listOf(".comment_view_wrapper", "#cmt", ".comment_wrapper", ".comment_view"),
         Site.GOODGAG to listOf("#comment", "#comments", ".comment_wrap", ".comment-area", ".comments"),
+        Site.DCINSIDE to listOf(".comment_wrap", "#focus_cmt", ".view_comment", ".all-comment", ".comment-box"),
+        Site.FMKOREA to listOf("#cmtPosition", ".fdb_lst", "#comment", ".comment_wrap"),
+        Site.BOBAEDREAM to listOf("#cmt_list", ".commentlistbox", ".cmt-list", ".comment"),
     )
     private val genericArticle = listOf("article", "[class*=article]", "[class*=view_cont]", "[class*=post_cont]", "[class*=read_body]", "main")
     private val genericComment = listOf("[id*=comment]", "[class*=comment_wrap]", "[class*=comment-wrap]", "[class*=cmt]", "[class*=reply]")

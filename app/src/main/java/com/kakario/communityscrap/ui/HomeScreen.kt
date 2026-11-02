@@ -112,7 +112,9 @@ fun HomeScreen(
             IconButton(onClick = onSettings) { Icon(Icons.Filled.Settings, "설정") }
         }
 
-        val labels = tabs.map { k -> if (k == "ALL") "전체" else Site.valueOf(k).label }
+        val labels = tabs.map { k ->
+            if (k == "ALL") "전체" else Site.valueOf(k).let { if (tabs.size >= 6) it.short else it.label }
+        }
         CategoryTabs(labels, tab, onSelect = { tabKey = tabs[it] })
         if (current != null) {
             val cats = feed.categories[current].orEmpty()

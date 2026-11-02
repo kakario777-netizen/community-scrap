@@ -13,6 +13,8 @@ enum class Site(
     val cookieUrls: List<String>,
     /** 글 주소 패턴. 마지막 그룹이 글 번호 */
     val postPattern: Regex,
+    /** 탭이 많을 때 쓰는 짧은 이름 */
+    val short: String = label,
 ) {
     GOODGAG(
         label = "고급유머",
@@ -43,6 +45,39 @@ enum class Site(
         pageParam = "page",
         cookieUrls = listOf("https://bbs.ruliweb.com", "https://m.ruliweb.com", "https://user.ruliweb.com", "https://ruliweb.com"),
         postPattern = Regex("""^https?://(?:bbs|m)\.ruliweb\.com/.*/read/(\d+)(?:[/?#].*)?$"""),
+    ),
+    DCINSIDE(
+        label = "디시인사이드",
+        short = "디시",
+        color = 0xFF3B4890,
+        defaultList = "https://gall.dcinside.com/board/lists/?id=dcbest",
+        loginUrl = "https://sign.dcinside.com/login",
+        home = "https://gall.dcinside.com/",
+        pageParam = "page",
+        cookieUrls = listOf("https://gall.dcinside.com", "https://m.dcinside.com", "https://sign.dcinside.com", "https://dcinside.com"),
+        postPattern = Regex("""^https?://(?:gall\.dcinside\.com/(?:mgallery/|mini/)?board/view/?\?(?:.*&)?no=|m\.dcinside\.com/(?:board|mini)/[\w-]+/)(\d+)"""),
+    ),
+    FMKOREA(
+        label = "에펨코리아",
+        short = "에펨",
+        color = 0xFF5B6EE1,
+        defaultList = "https://www.fmkorea.com/best",
+        loginUrl = "https://www.fmkorea.com/index.php?act=dispMemberLoginForm",
+        home = "https://www.fmkorea.com/",
+        pageParam = "page",
+        cookieUrls = listOf("https://www.fmkorea.com", "https://m.fmkorea.com", "https://fmkorea.com"),
+        postPattern = Regex("""^https?://(?:www\.|m\.)?fmkorea\.com/(?:[a-z_0-9]+/)?(?:index\.php\?(?:.*&)?document_srl=)?(\d{6,})(?:[/?#&].*)?$"""),
+    ),
+    BOBAEDREAM(
+        label = "보배드림",
+        short = "보배",
+        color = 0xFF00897B,
+        defaultList = "https://www.bobaedream.co.kr/list?code=best",
+        loginUrl = "https://www.bobaedream.co.kr/member/login",
+        home = "https://www.bobaedream.co.kr/",
+        pageParam = "page",
+        cookieUrls = listOf("https://www.bobaedream.co.kr", "https://m.bobaedream.co.kr", "https://bobaedream.co.kr"),
+        postPattern = Regex("""^https?://(?:(?:www\.)?bobaedream\.co\.kr/view\?(?:.*&)?[Nn]o=|m\.bobaedream\.co\.kr/board/bbs_view/[\w-]+/)(\d+)"""),
     );
 
     fun pageUrl(base: String, page: Int): String {

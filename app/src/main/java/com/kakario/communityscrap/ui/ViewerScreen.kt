@@ -175,7 +175,7 @@ fun ViewerScreen(start: Post?, list: List<Post>, onBack: () -> Unit) {
     }
 
     Column(Modifier.fillMaxSize()) {
-        Bar(post.title, onBack = onBack) {
+        Bar("", onBack = onBack) {
             IconButton(onClick = {
                 web?.evaluateJavascript(ALL_MEDIA_JS) { js ->
                     val list = runCatching {
@@ -199,6 +199,19 @@ fun ViewerScreen(start: Post?, list: List<Post>, onBack: () -> Unit) {
                 val u = web?.url ?: post.url
                 runCatching { ctx.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(u))) }
             }) { Icon(Icons.Filled.OpenInBrowser, "브라우저로 열기") }
+        }
+        // 루리웹은 글 화면에 제목이 안 나와서 아이콘 줄 아래에 따로 보여준다
+        if (post.site == Site.RULIWEB && !showOriginal) {
+            Text(
+                post.title,
+                Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 10.dp),
+                fontSize = 18.sp,
+                fontWeight = FontWeight.Bold,
+                lineHeight = 24.sp,
+                maxLines = 3,
+                overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+            )
+            HorizontalDivider(color = Line)
         }
         Box(Modifier.fillMaxWidth().height(2.dp), contentAlignment = Alignment.TopStart) {
             if (progress in 1..99) {

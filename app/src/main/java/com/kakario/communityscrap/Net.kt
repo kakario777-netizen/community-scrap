@@ -66,6 +66,9 @@ object Net {
         host.contains("ruliweb") -> "https://bbs.ruliweb.com/"
         host.contains("arca") || host.contains("namu.la") -> "https://arca.live/"
         host.contains("goodgag") -> "https://www.goodgag.net/"
+        host.contains("dcinside") || host.contains("dcimg") -> "https://gall.dcinside.com/"
+        host.contains("fmkorea") -> "https://www.fmkorea.com/"
+        host.contains("bobaedream") -> "https://www.bobaedream.co.kr/"
         else -> null
     }
 

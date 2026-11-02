@@ -14,26 +14,36 @@ object Parser {
         Site.ARCA to listOf(".title", ".vrow-top .title"),
         Site.RULIWEB to listOf(".subject_link", "a.deco", ".subject .text_over", ".title_wrapper"),
         Site.GOODGAG to listOf(".title", ".subject", ".tit", "h2", "h3", "strong"),
+        Site.DCINSIDE to listOf(".gall_tit a:not(.reply_numbox)", ".subjectin", ".subject-add .subjectin", ".detail-txt"),
+        Site.FMKOREA to listOf("h3.title", ".title a", ".title", ".hotdeal_var8"),
+        Site.BOBAEDREAM to listOf("a.bsubject", ".bsubject", ".txt", ".title"),
     )
 
     private val commentSelectors = listOf(
-        ".comment-count", ".num_reply", ".reply_num", ".num_comment", ".cmt", ".comment", ".reply", ".cnt_cmt",
+        ".comment-count", ".num_reply", ".reply_num", ".num_comment", ".comment_count", ".totreply", ".ct",
+        ".cmt", ".comment", ".reply", ".cnt_cmt",
     )
 
     private val infoSelectors = mapOf(
         Site.ARCA to listOf(".vcol.col-author", ".user-info"),
         Site.RULIWEB to listOf(".writer", ".nick"),
         Site.GOODGAG to listOf(".nick", ".writer", ".name"),
+        Site.DCINSIDE to listOf(".gall_writer .nickname", ".gall_writer", ".ginfo li:first-child"),
+        Site.FMKOREA to listOf(".author", ".member"),
+        Site.BOBAEDREAM to listOf(".author02", ".author"),
     )
 
     private val categorySelectors = mapOf(
         Site.ARCA to listOf(".badge", ".vrow-top .badge"),
         Site.RULIWEB to listOf(".divsn", ".category", ".cate"),
         Site.GOODGAG to listOf(".category", ".cate", ".tag", "[class*=category]", "[class*=cate]"),
+        Site.DCINSIDE to listOf(".gall_subject", ".subject-add .sp-lst-txt"),
+        Site.FMKOREA to listOf(".category a", ".category"),
+        Site.BOBAEDREAM to listOf(".category", ".cate"),
     )
-    private val timeSelectors = listOf("time", ".col-time", ".time", ".date", ".regdate", ".datetime", "[class*=date]")
-    private val viewSelectors = listOf(".col-view", ".hit", ".view_count", ".views", ".count_view", ".read", "[class*=hit]", "[class*=view_cnt]")
-    private val likeSelectors = listOf(".col-rate", ".recomd", ".recommend", ".like", ".likes", ".vote", ".up", "[class*=recom]", "[class*=like]")
+    private val timeSelectors = listOf("time", ".col-time", ".gall_date", ".time", ".date", ".regdate", ".datetime", "[class*=date]")
+    private val viewSelectors = listOf(".col-view", ".gall_count", ".hit", ".view_count", ".views", ".count_view", ".read", ".count", "[class*=hit]", "[class*=view_cnt]")
+    private val likeSelectors = listOf(".col-rate", ".gall_recommend", ".recomd", ".recomm", ".recommend", ".pc_voted_count", ".voted_count", ".like", ".likes", ".vote", ".up", "[class*=recom]", "[class*=like]")
 
     private fun textOf(row: Element, sels: List<String>, maxLen: Int): String? {
         for (sel in sels) {
@@ -75,11 +85,15 @@ object Parser {
         return null
     }
 
+    private val boardIds = listOf("id", "code", "mid")
+    private fun param(q: String?, k: String): String? =
+        q?.split('&')?.firstOrNull { it.substringBefore('=').equals(k, true) }?.substringAfter('=', "")
+
     /** 게시판 페이지 안의 소분류 링크(같은 게시판 주소 + 분류 파라미터) */
     fun categories(site: Site, html: String, baseUrl: String): List<Category> {
         val base = runCatching { java.net.URI(baseUrl) }.getOrNull() ?: return emptyList()
         val basePath = (base.path ?: "").trimEnd('/')
-        val keys = setOf("category", "cate", "ctg", "sca", "bo_cat", "cat", "division", "tag", "mode")
+        val keys = setOf("category", "cate", "ctg", "sca", "bo_cat", "cat", "division", "tag", "mode", "search_head", "exception_mode", "s_cate")
         val doc = Jsoup.parse(html, baseUrl)
         val out = LinkedHashMap<String, Category>()
         for (a in doc.select("a[href]")) {
@@ -90,6 +104,8 @@ object Parser {
             val path = (u.path ?: "").trimEnd('/')
             if (!(path == basePath || path == "$basePath/list")) continue
             val query = u.rawQuery ?: continue
+            // 같은 주소라도 게시판 번호(id·code·mid)가 다르면 다른 게시판
+            if (boardIds.any { k -> param(base.rawQuery, k) != null && param(base.rawQuery, k) != param(query, k) }) continue
             val hit = query.split('&').any { kv ->
                 val k = kv.substringBefore('=').lowercase()
                 k in keys && kv.substringAfter('=', "").isNotEmpty()
