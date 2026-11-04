@@ -71,7 +71,7 @@ img, video { pointer-events:auto !important; -webkit-user-drag:auto !important; 
     private val commentSel = mapOf(
         Site.ARCA to listOf("#comment", ".article-comment", ".list-area"),
         Site.RULIWEB to listOf(".comment_view_wrapper", "#cmt", ".comment_wrapper", ".comment_view"),
-        Site.GOODGAG to listOf("#comment", "#comments", ".comment_wrap", ".comment-area", ".comments"),
+        Site.GOODGAG to listOf("#comment", "#comments", ".comment_wrap", ".comment-area", ".comments", ".comment_list", ".cmt_list", "[class*=comment]", "[id*=cmt]"),
         Site.DCINSIDE to listOf(".comment_wrap", "#focus_cmt", ".view_comment", ".all-comment", ".comment-box"),
         Site.FMKOREA to listOf("#cmtPosition", ".fdb_lst", "#comment", ".comment_wrap"),
         Site.BOBAEDREAM to listOf("#cmt_list", ".commentlistbox", ".cmt-list", ".comment"),
@@ -95,6 +95,11 @@ img, video { pointer-events:auto !important; -webkit-user-drag:auto !important; 
       }
       return false;
     }
+    function shown(e){
+      if (!e.getClientRects().length) return false;
+      var cs = getComputedStyle(e);
+      return cs.display!=='none' && cs.visibility!=='hidden';
+    }
     function score(e){
       var txt = e.innerText || '';
       var s = txt.length + e.querySelectorAll('img,video,iframe').length*300;
@@ -106,7 +111,7 @@ img, video { pointer-events:auto !important; -webkit-user-drag:auto !important; 
     var art=null, bs=-1;
     for (var i=0;i<A.length;i++){
       document.querySelectorAll(A[i]).forEach(function(e){
-        if (e===document.body || e===document.documentElement || bad(e)) return;
+        if (e===document.body || e===document.documentElement || bad(e) || !shown(e)) return;
         if (e.contains(document.querySelector('header,nav'))) return;
         var s=score(e); if (i<OWN) s+=500;
         if (s>bs){bs=s;art=e;}
@@ -115,25 +120,35 @@ img, video { pointer-events:auto !important; -webkit-user-drag:auto !important; 
     }
     // 앞에서 잘 찾은 본문이 남아 있으면 그대로 쓴다 (늦게 붙는 내용 때문에 엉뚱한 곳으로 바뀌지 않게)
     var prev = window.__csArt;
-    if (prev && document.contains(prev) && (!art || score(prev) >= bs*0.7)) { art = prev; bs = score(prev); }
+    if (prev && document.contains(prev) && shown(prev) && (!art || score(prev) >= bs*0.7)) { art = prev; bs = score(prev); }
     if (!art || bs < 120) return 'none';
     // 본문 영역이 너무 넓게 잡혔으면, 내용 대부분을 가진 안쪽 칸으로 좁힌다
     for (var dd=0; dd<5; dd++){
       var bk=null, b2=-1;
-      Array.prototype.forEach.call(art.children, function(k){ var s2=score(k); if (s2>b2){b2=s2;bk=k;} });
+      Array.prototype.forEach.call(art.children, function(k){ if (!shown(k)) return; var s2=score(k); if (s2>b2){b2=s2;bk=k;} });
       if (bk && b2 >= bs*0.92 && !bad(bk)) { art=bk; bs=b2; } else break;
     }
     window.__csArt = art;
     var keep=[art];
-    var cm=null, cs=-1;
-    for (var j=0;j<C.length && !cm;j++){
+    // 댓글 목록과 댓글 쓰기 칸이 따로 떨어져 있어도 모두 남긴다
+    var cms=[];
+    for (var j=0;j<C.length;j++){
       document.querySelectorAll(C[j]).forEach(function(e){
-        if (art.contains(e) || e.contains(art)) return;
-        var s=(e.innerText||'').length + (e.querySelector('textarea')?200:0);
-        if (s>cs){cs=s;cm=e;}
+        if (art.contains(e) || e.contains(art) || e===document.body) return;
+        if (cms.some(function(x){ return x===e || x.contains(e); })) return;
+        cms = cms.filter(function(x){ return !e.contains(x); });
+        cms.push(e);
       });
     }
-    if (cm) keep.push(cm);
+    // 너무 큰(페이지 전체를 감싸는) 칸은 빼고, 남은 댓글 칸들의 공통 부모가 가까우면 부모째 남긴다
+    cms = cms.filter(function(e){ return !e.contains(document.querySelector('header,nav')); });
+    if (cms.length > 1) {
+      var par = cms[0].parentElement;
+      while (par && !cms.every(function(x){ return par.contains(x); })) par = par.parentElement;
+      if (par && par!==document.body && !par.contains(art) && !art.contains(par)) cms = [par];
+    }
+    var cm = cms[0] || null;
+    cms.forEach(function(e){ keep.push(e); });
     function holds(n){ return keep.some(function(k){ return n===k || n.contains(k); }); }
     // 남길 자리와 그 위 경로에만 표시를 달고, 나머지는 CSS 규칙으로 숨긴다.
     // 사이트가 나중에 붙이는 요소도 같은 규칙에 걸려 처음부터 안 보인다.
@@ -147,21 +162,32 @@ img, video { pointer-events:auto !important; -webkit-user-drag:auto !important; 
     st.textContent = 'body *:not([data-cs-path]):not([data-cs-root]):not([data-cs-root] *){display:none !important}' +
       '[data-cs-path]{position:static !important;transform:none !important;padding-top:0 !important;margin-top:0 !important;min-height:0 !important}' +
       '[data-cs-root] header,[data-cs-root] nav,[data-cs-root] [class*="gnb"],[data-cs-root] [class*="navbar"],[data-cs-root] [class*="topbar"],' +
-      '[data-cs-root] [class*="top_bar"],[data-cs-root] [class*="top-bar"],[data-cs-root] [class*="logo"],[data-cs-root] [id*="header"],' +
-      '[data-cs-root] [class*="header"]:not([class*="article"]):not([class*="view"]):not([class*="post"]):not([class*="cmt"]):not([class*="comment"]){display:none !important}';
+      '[data-cs-root] [class*="top_bar"],[data-cs-root] [class*="top-bar"],[data-cs-root] [class*="site-logo"],[data-cs-root] [class*="site_logo"],' +
+      '[data-cs-root] [id*="header"]:not([id*="article"]):not([id*="view"]):not([id*="post"]):not([id*="cmt"]):not([id*="comment"]),' +
+      '[data-cs-root] [class*="header"]:not([class*="article"]):not([class*="view"]):not([class*="post"]):not([class*="cmt"]):not([class*="comment"]):not([class*="title"]){display:none !important}';
     // 본문 안에 들어있는 화면 고정 막대(위·아래 붙는 메뉴)도 숨긴다
     keep.forEach(function(k){
       k.querySelectorAll('*').forEach(function(e){
         var pos = getComputedStyle(e).position;
-        if ((pos==='fixed' || pos==='sticky') && !e.querySelector('textarea')) { e.style.setProperty('display','none','important'); e.setAttribute('data-cs-hidden','1'); }
+        if ((pos==='fixed' || pos==='sticky') && !e.querySelector('textarea') && e.getBoundingClientRect().height < 120 && !e.querySelector('img,video,iframe')) { e.style.setProperty('display','none','important'); e.setAttribute('data-cs-hidden','1'); }
       });
     });
     document.querySelectorAll('.included-article-list,.article-list,.board_list_table,.relative_list,.notice_board').forEach(function(e){
-      if (!holds(e) && !(cm && cm.contains(e)) && !art.contains(e)) { e.style.setProperty('display','none','important'); e.setAttribute('data-cs-hidden','1'); }
+      if (!holds(e) && !cms.some(function(x){ return x.contains(e); }) && !art.contains(e)) { e.style.setProperty('display','none','important'); e.setAttribute('data-cs-hidden','1'); }
     });
     document.body.style.setProperty('padding-top','0','important');
     document.body.style.setProperty('margin-top','0','important');
     keep.forEach(function(k){ k.style.setProperty('max-width','100%','important'); k.style.setProperty('margin-left','0','important'); k.style.setProperty('margin-right','0','important'); });
+    // 정리 후 본문이 실제로 안 보이면 전부 되돌리고 원본을 보여준다
+    var h = art.getBoundingClientRect().height;
+    var vis = (art.innerText||'').trim().length + art.querySelectorAll('img,video,iframe').length*50;
+    if (h < 40 || vis < 20 || !shown(art)) {
+      st.textContent = '';
+      document.querySelectorAll('[data-cs-path],[data-cs-root]').forEach(function(e){ e.removeAttribute('data-cs-path'); e.removeAttribute('data-cs-root'); });
+      document.querySelectorAll('[data-cs-hidden]').forEach(function(e){ e.style.removeProperty('display'); e.removeAttribute('data-cs-hidden'); });
+      window.__csArt = null;
+      return 'none';
+    }
     return 'ok';
   } catch(e) { return 'err'; }
 })(${arr(articleSel[site].orEmpty() + genericArticle)}, $own, ${arr(commentSel[site].orEmpty() + genericComment)}, '$t');
