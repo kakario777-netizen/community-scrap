@@ -327,8 +327,8 @@ fun ViewerScreen(start: Post?, list: List<Post>, onBack: () -> Unit) {
             Modifier.fillMaxWidth().height(52.dp).padding(horizontal = 6.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            TextButton(onClick = { prev?.let { go(it) } }, enabled = prev != null, modifier = Modifier.weight(1f)) {
-                Text("‹  이전 글", fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
+            TextButton(onClick = { next?.let { go(it) } }, enabled = next != null, modifier = Modifier.weight(1f)) {
+                Text("‹  다음 글", fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
             }
             TextButton(onClick = {
                 showOriginal = !showOriginal
@@ -336,8 +336,8 @@ fun ViewerScreen(start: Post?, list: List<Post>, onBack: () -> Unit) {
             }) {
                 Text(if (showOriginal) "본문만" else "원본", fontSize = 13.sp, color = Sub)
             }
-            TextButton(onClick = { next?.let { go(it) } }, enabled = next != null, modifier = Modifier.weight(1f)) {
-                Text("다음 글  ›", fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
+            TextButton(onClick = { prev?.let { go(it) } }, enabled = prev != null, modifier = Modifier.weight(1f)) {
+                Text("이전 글  ›", fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
             }
         }
     }

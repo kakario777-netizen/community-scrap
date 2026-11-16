@@ -85,7 +85,7 @@ img, video { pointer-events:auto !important; -webkit-user-drag:auto !important; 
         val own = articleSel[site].orEmpty().size
         val t = title.take(14).replace("\\", "").replace("'", "").replace("\n", " ")
         return """
-(function(A,OWN,C,T){
+(function(A,OWN,C,T,P){
   try {
     var BAD = /(^|[\s_-])(comment|cmt|reply|write|form|login|footer|header|gnb|menu|sidebar|aside)/i;
     function bad(e){
@@ -148,6 +148,31 @@ img, video { pointer-events:auto !important; -webkit-user-drag:auto !important; 
       if (par && par!==document.body && !par.contains(art) && !art.contains(par)) cms = [par];
     }
     var cm = cms[0] || null;
+    // 댓글 칸 아래에 붙은 '다른 글 목록'(제목은 안 보이고 [댓글수]만 남던 것)은 숨긴다
+    try {
+      var PR = new RegExp(P);
+      var curM = location.href.match(PR);
+      var curId = curM ? curM[curM.length-1] : null;
+      var rows = [];
+      cms.forEach(function(box){
+        box.querySelectorAll('a[href]').forEach(function(a){
+          var m = a.href.match(PR);
+          if (!m || m[m.length-1] === curId) return;
+          var row = a.closest('li,tr,dl') || a;
+          if (box.contains(row) && row !== box) rows.push(row);
+        });
+      });
+      rows.forEach(function(r){ r.style.setProperty('display','none','important'); r.setAttribute('data-cs-hidden','1'); });
+      // 목록 묶음이 통째로 비면 묶음째 숨긴다
+      rows.forEach(function(r){
+        var list = r.parentElement && r.parentElement.closest('ul,ol,table,dl');
+        var items = list ? list.querySelectorAll('li,tr') : [];
+        if (list && !list.querySelector('textarea') && items.length &&
+            Array.prototype.every.call(items, function(x){ return !!x.closest('[data-cs-hidden]'); })) {
+          list.style.setProperty('display','none','important'); list.setAttribute('data-cs-hidden','1');
+        }
+      });
+    } catch(e) {}
     cms.forEach(function(e){ keep.push(e); });
     function holds(n){ return keep.some(function(k){ return n===k || n.contains(k); }); }
     // 남길 자리와 그 위 경로에만 표시를 달고, 나머지는 CSS 규칙으로 숨긴다.
@@ -190,7 +215,7 @@ img, video { pointer-events:auto !important; -webkit-user-drag:auto !important; 
     }
     return 'ok';
   } catch(e) { return 'err'; }
-})(${arr(articleSel[site].orEmpty() + genericArticle)}, $own, ${arr(commentSel[site].orEmpty() + genericComment)}, '$t');
+})(${arr(articleSel[site].orEmpty() + genericArticle)}, $own, ${arr(commentSel[site].orEmpty() + genericComment)}, '$t', '${site.postPattern.pattern.replace("\\", "\\\\").replace("'", "\\'")}');
 """
     }
 
