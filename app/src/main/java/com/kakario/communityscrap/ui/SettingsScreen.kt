@@ -47,6 +47,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Delete
 import android.webkit.WebChromeClient
 import com.kakario.communityscrap.Post
+import androidx.compose.runtime.collectAsState
 import com.kakario.communityscrap.Saver
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -87,6 +88,9 @@ fun SettingsScreen(onLogin: (Site) -> Unit, onBack: () -> Unit) {
             Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(14.dp),
         ) {
+            SectionTitle("앱 업데이트")
+            UpdateCard()
+
             SectionTitle("탭")
             TabSettings()
 
@@ -158,6 +162,25 @@ fun SettingsScreen(onLogin: (Site) -> Unit, onBack: () -> Unit) {
                 fontSize = 13.sp, color = Sub, lineHeight = 19.sp,
             )
             Site.entries.forEach { site -> SiteCard(site, onLogin) }
+        }
+    }
+}
+
+@Composable
+private fun UpdateCard() {
+    val ctx = LocalContext.current
+    val updater = remember { com.kakario.communityscrap.update.Updater.get(ctx) }
+    val st by updater.state.collectAsState()
+    Surface(shape = RoundedCornerShape(12.dp), color = Pal.cur.card) {
+        Row(Modifier.fillMaxWidth().padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
+            Column(Modifier.weight(1f)) {
+                Text("커뮤 모아 빌드 #${updater.currentBuild}", fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
+                Text("앱을 켤 때 새 버전이 있으면 알아서 받아 설치해요", fontSize = 12.sp, color = Sub)
+            }
+            Button(
+                onClick = { updater.check(quiet = false) },
+                enabled = st !is com.kakario.communityscrap.update.Updater.State.Checking,
+            ) { Text(if (st is com.kakario.communityscrap.update.Updater.State.Checking) "확인 중…" else "확인") }
         }
     }
 }

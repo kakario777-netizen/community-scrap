@@ -11,6 +11,8 @@ import androidx.compose.foundation.layout.systemBars
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Typography
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.material3.Surface
 import androidx.compose.material3.lightColorScheme
@@ -57,6 +59,14 @@ fun typographyWith(f: FontFamily): Typography {
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        val updater = com.kakario.communityscrap.update.Updater.get(applicationContext)
+        if (savedInstanceState == null) {
+            updater.check(quiet = true)
+            // 업데이트 완료 알림을 띄우려면 알림 허용이 필요 (안드로이드 13+)
+            if (android.os.Build.VERSION.SDK_INT >= 33 &&
+                checkSelfPermission(android.Manifest.permission.POST_NOTIFICATIONS) != android.content.pm.PackageManager.PERMISSION_GRANTED
+            ) requestPermissions(arrayOf(android.Manifest.permission.POST_NOTIFICATIONS), 11)
+        }
         enableEdgeToEdge(
             statusBarStyle = SystemBarStyle.light(android.graphics.Color.TRANSPARENT, android.graphics.Color.TRANSPARENT),
             navigationBarStyle = SystemBarStyle.light(android.graphics.Color.WHITE, android.graphics.Color.WHITE),
@@ -96,6 +106,8 @@ class MainActivity : ComponentActivity() {
                     Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.systemBars),
                     color = pal.bg,
                 ) {
+                    val updateState by updater.state.collectAsState()
+                    com.kakario.communityscrap.ui.UpdateDialog(updateState, updater)
                     val nav = rememberNavController()
                     val feed: FeedViewModel = viewModel()
                     NavHost(nav, startDestination = "home") {
