@@ -1,5 +1,7 @@
 name: APK 빌드
 
+# 릴리스할 때만 빌드: 커밋 메시지에 [release]가 있거나 직접 실행할 때.
+# 풀 리퀘스트로는 실행되지 않음(외부인이 Secrets를 쓸 수 없게).
 on:
   push:
     branches: [main]
@@ -8,8 +10,13 @@ on:
 permissions:
   contents: write
 
+concurrency:
+  group: build-apk
+  cancel-in-progress: true
+
 jobs:
   build:
+    if: github.event_name == 'workflow_dispatch' || contains(github.event.head_commit.message, '[release]')
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -20,6 +27,15 @@ jobs:
           java-version: 17
 
       - uses: gradle/actions/setup-gradle@v4
+
+      - name: 서명 키 꺼내기 (GitHub Secrets)
+        env:
+          KEYSTORE_B64: ${{ secrets.KEYSTORE_B64 }}
+        run: |
+          if [ -n "$KEYSTORE_B64" ]; then
+            echo "$KEYSTORE_B64" | base64 -d > "$RUNNER_TEMP/release.jks"
+            echo "KEYSTORE_FILE=$RUNNER_TEMP/release.jks" >> "$GITHUB_ENV"
+          fi
 
       - name: 글꼴 받기
         run: |
@@ -39,6 +55,8 @@ jobs:
           rm -rf gf
 
       - name: APK 만들기
+        env:
+          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
         run: |
           chmod +x gradlew
           ./gradlew assembleRelease --stacktrace

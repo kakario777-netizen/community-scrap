@@ -20,10 +20,11 @@ android {
 
     signingConfigs {
         create("release") {
-            storeFile = file("release.jks")
-            storePassword = "communityscrap"
+            // 서명 키는 GitHub Secrets(KEYSTORE_B64, KEYSTORE_PASSWORD)에서 빌드 때만 꺼내 씀
+            storeFile = file(System.getenv("KEYSTORE_FILE") ?: "release.jks")
+            storePassword = System.getenv("KEYSTORE_PASSWORD") ?: ""
             keyAlias = "communityscrap"
-            keyPassword = "communityscrap"
+            keyPassword = System.getenv("KEYSTORE_PASSWORD") ?: ""
         }
     }
 
